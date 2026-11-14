@@ -79,3 +79,17 @@ docker compose up -d --build
 ```bash
 APP_PORT=18421 docker compose up -d
 ```
+
+### Dockge（事前ビルド済みイメージ）での起動手順
+
+GitHub Actionsにより、`main`ブランチへプッシュすると`linux/amd64`および`linux/arm64`向けのイメージがGitHub Container Registry（GHCR）へ公開されます。Dockgeで管理する場合は、新しいスタックの作成画面へ以下の内容を入力してください。
+
+```yaml
+services:
+  mermaid-editor:
+    image: ghcr.io/galdlore/mermaid-flow-editor:latest
+    container_name: mermaid-flow-editor
+    ports:
+      - "18420:80"
+    restart: unless-stopped
+```
