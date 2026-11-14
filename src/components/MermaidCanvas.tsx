@@ -131,10 +131,10 @@ function MermaidCustomNode({ data, selected }: NodeProps<MermaidFlowNode>) {
       ? { color: data.textColor }
       : undefined
     : {
-        backgroundColor: bgColor,
-        ...(data.strokeColor && !selected ? { borderColor: data.strokeColor } : {}),
-        ...(data.textColor ? { color: data.textColor } : {}),
-      };
+      backgroundColor: bgColor,
+      ...(data.strokeColor && !selected ? { borderColor: data.strokeColor } : {}),
+      ...(data.textColor ? { color: data.textColor } : {}),
+    };
 
   return (
     <div
@@ -332,10 +332,10 @@ interface SubgraphBox {
 }
 
 function buildSubgraphBoxes(
-  subgraphs: MermaidSubgraphData[] | undefined,
-  diagramNodes: MermaidNodeData[],
+  diagramData: MermaidDiagramData,
   flowNodes: MermaidFlowNode[]
 ): SubgraphBox[] {
+  const subgraphs = diagramData.subgraphs;
   if (!subgraphs || subgraphs.length === 0) {
     return [];
   }
@@ -345,8 +345,102 @@ function buildSubgraphBoxes(
     flowNodeMap.set(fn.id, fn);
   }
 
+  if (diagramData.diagramType === 'swimlane') {
+    const isHorizontal = diagramData.direction === 'LR' || diagramData.direction === 'RL';
+
+    if (isHorizontal) {
+      let globalMinX = Infinity;
+      let globalMaxX = -Infinity;
+      for (const fn of flowNodes) {
+        const w = fn.measured?.width ?? 150;
+        globalMinX = Math.min(globalMinX, fn.position.x);
+        globalMaxX = Math.max(globalMaxX, fn.position.x + w);
+      }
+      const laneX = Number.isFinite(globalMinX) ? Math.min(20, globalMinX - 110) : 20;
+      const laneWidth = Number.isFinite(globalMaxX)
+        ? Math.max(660, globalMaxX - laneX + 36)
+        : 660;
+
+      let cursorY = 20;
+      return subgraphs.map((subgraph) => {
+        const members = diagramData.nodes
+          .filter((n) => n.subgraphId === subgraph.id)
+          .map((n) => flowNodeMap.get(n.id))
+          .filter((n): n is MermaidFlowNode => Boolean(n));
+
+        if (members.length === 0) {
+          const box: SubgraphBox = {
+            subgraph,
+            x: laneX,
+            y: cursorY,
+            width: laneWidth,
+            height: 128,
+          };
+          cursorY += 136;
+          return box;
+        }
+
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (const fn of members) {
+          const h = fn.measured?.height ?? 62;
+          minY = Math.min(minY, fn.position.y);
+          maxY = Math.max(maxY, fn.position.y + h);
+        }
+        const y = minY - 22;
+        const height = Math.max(128, maxY - minY + 44);
+        cursorY = Math.max(cursorY, y + height + 8);
+        return { subgraph, x: laneX, y, width: laneWidth, height };
+      });
+    }
+
+    let globalMinY = Infinity;
+    let globalMaxY = -Infinity;
+    for (const fn of flowNodes) {
+      const h = fn.measured?.height ?? 62;
+      globalMinY = Math.min(globalMinY, fn.position.y);
+      globalMaxY = Math.max(globalMaxY, fn.position.y + h);
+    }
+    const laneY = Number.isFinite(globalMinY) ? Math.min(16, globalMinY - 56) : 16;
+    const laneHeight = Number.isFinite(globalMaxY)
+      ? Math.max(360, globalMaxY - laneY + 32)
+      : 360;
+
+    let cursorX = 20;
+    return subgraphs.map((subgraph) => {
+      const members = diagramData.nodes
+        .filter((n) => n.subgraphId === subgraph.id)
+        .map((n) => flowNodeMap.get(n.id))
+        .filter((n): n is MermaidFlowNode => Boolean(n));
+
+      if (members.length === 0) {
+        const box: SubgraphBox = {
+          subgraph,
+          x: cursorX,
+          y: laneY,
+          width: 220,
+          height: laneHeight,
+        };
+        cursorX += 228;
+        return box;
+      }
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (const fn of members) {
+        const w = fn.measured?.width ?? 150;
+        minX = Math.min(minX, fn.position.x);
+        maxX = Math.max(maxX, fn.position.x + w);
+      }
+      const x = minX - 24;
+      const width = Math.max(220, maxX - minX + 48);
+      cursorX = Math.max(cursorX, x + width + 8);
+      return { subgraph, x, y: laneY, width, height: laneHeight };
+    });
+  }
+
   return subgraphs.map((subgraph, index) => {
-    const memberFlowNodes = diagramNodes
+    const memberFlowNodes = diagramData.nodes
       .filter((n) => n.subgraphId === subgraph.id)
       .map((n) => flowNodeMap.get(n.id))
       .filter((n): n is MermaidFlowNode => Boolean(n));
@@ -421,8 +515,8 @@ export default function MermaidCanvas({
   }, [diagramData.edges]);
 
   const subgraphBoxes = useMemo(
-    () => buildSubgraphBoxes(diagramData.subgraphs, diagramData.nodes, flowNodes),
-    [diagramData.subgraphs, diagramData.nodes, flowNodes]
+    () => buildSubgraphBoxes(diagramData, flowNodes),
+    [diagramData, flowNodes]
   );
 
   const handleNodesChange = useCallback(
@@ -434,15 +528,35 @@ export default function MermaidCanvas({
 
   const handleNodeDragStop: OnNodeDrag<MermaidFlowNode> = useCallback(
     (_event, draggedNode) => {
+      const nodeW = draggedNode.measured?.width ?? 150;
+      const nodeH = draggedNode.measured?.height ?? 62;
+      const centerX = draggedNode.position.x + nodeW / 2;
+      const centerY = draggedNode.position.y + nodeH / 2;
+
+      let droppedLaneId: string | undefined;
+      if (diagramData.diagramType === 'swimlane') {
+        const hitBox = subgraphBoxes.find(
+          (box) =>
+            centerX >= box.x &&
+            centerX <= box.x + box.width &&
+            centerY >= box.y &&
+            centerY <= box.y + box.height
+        );
+        if (hitBox) {
+          droppedLaneId = hitBox.subgraph.id;
+        }
+      }
+
       const nextNodes = diagramData.nodes.map((node) =>
         node.id === draggedNode.id
           ? {
-              ...node,
-              position: {
-                x: Math.round(draggedNode.position.x),
-                y: Math.round(draggedNode.position.y),
-              },
-            }
+            ...node,
+            ...(droppedLaneId ? { subgraphId: droppedLaneId } : {}),
+            position: {
+              x: Math.round(draggedNode.position.x),
+              y: Math.round(draggedNode.position.y),
+            },
+          }
           : node
       );
 
@@ -451,7 +565,7 @@ export default function MermaidCanvas({
         nodes: nextNodes,
       });
     },
-    [diagramData, onChange]
+    [diagramData, onChange, subgraphBoxes]
   );
 
   const handleConnect = useCallback(
@@ -589,24 +703,62 @@ export default function MermaidCanvas({
       >
         {subgraphBoxes.length > 0 && (
           <ViewportPortal>
-            {subgraphBoxes.map(({ subgraph, x, y, width, height }) => (
-              <div
-                key={subgraph.id}
-                className="mermaid-subgraph-box"
-                style={{
-                  transform: `translate(${x}px, ${y}px)`,
-                  width: `${width}px`,
-                  height: `${height}px`,
-                }}
-              >
-                <div className="mermaid-subgraph-header">
-                  <span className="mermaid-subgraph-title">{subgraph.title || subgraph.id}</span>
-                  {subgraph.direction && (
-                    <span className="mermaid-subgraph-dir">{subgraph.direction}</span>
-                  )}
+            {subgraphBoxes.map(({ subgraph, x, y, width, height }) => {
+              const isSwimlane = diagramData.diagramType === 'swimlane';
+              const isHorizontalLane =
+                diagramData.direction === 'LR' || diagramData.direction === 'RL';
+
+              if (isSwimlane) {
+                return (
+                  <div
+                    key={subgraph.id}
+                    className={`mermaid-swimlane-box ${isHorizontalLane ? 'is-horizontal' : 'is-vertical'
+                      }`}
+                    style={{
+                      transform: `translate(${x}px, ${y}px)`,
+                      width: `${width}px`,
+                      height: `${height}px`,
+                      ...(subgraph.stroke ? { borderColor: subgraph.stroke } : {}),
+                    }}
+                  >
+                    <div
+                      className="mermaid-swimlane-header"
+                      style={{
+                        ...(subgraph.fill ? { backgroundColor: subgraph.fill } : {}),
+                        ...(subgraph.stroke ? { borderColor: subgraph.stroke } : {}),
+                      }}
+                    >
+                      <span className="mermaid-swimlane-title">
+                        {subgraph.title || subgraph.id}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={subgraph.id}
+                  className="mermaid-subgraph-box"
+                  style={{
+                    transform: `translate(${x}px, ${y}px)`,
+                    width: `${width}px`,
+                    height: `${height}px`,
+                    ...(subgraph.fill ? { backgroundColor: subgraph.fill } : {}),
+                    ...(subgraph.stroke ? { borderColor: subgraph.stroke } : {}),
+                  }}
+                >
+                  <div className="mermaid-subgraph-header">
+                    <span className="mermaid-subgraph-title">
+                      {subgraph.title || subgraph.id}
+                    </span>
+                    {subgraph.direction && (
+                      <span className="mermaid-subgraph-dir">{subgraph.direction}</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </ViewportPortal>
         )}
         <Background gap={18} size={1} color="#cbd5e1" />

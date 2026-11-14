@@ -3,6 +3,7 @@ import type {
   EdgeLineType,
   MermaidClassDefData,
   MermaidDiagramData,
+  MermaidDiagramType,
   MermaidDirection,
   MermaidEdgeData,
   MermaidNodeData,
@@ -72,6 +73,197 @@ export function createDefaultDiagramData(lang: 'ja' | 'en' = 'ja'): MermaidDiagr
       },
     ],
   };
+}
+
+export function createDefaultSwimlaneData(lang: 'ja' | 'en' = 'ja'): MermaidDiagramData {
+  const isJa = lang === 'ja';
+  return {
+    diagramType: 'swimlane',
+    direction: 'LR',
+    subgraphs: [
+      {
+        id: 'lane_1',
+        title: isJa ? '顧客' : 'Customer',
+        fill: '#eff6ff',
+        stroke: '#2563eb',
+      },
+      {
+        id: 'lane_2',
+        title: isJa ? '対応チーム' : 'Support Team',
+        fill: '#f0fdf4',
+        stroke: '#16a34a',
+      },
+    ],
+    nodes: [
+      {
+        id: 'node_1',
+        label: isJa ? '問い合わせ' : 'Request',
+        shape: 'stadium',
+        color: '#ffffff',
+        subgraphId: 'lane_1',
+        position: { x: 140, y: 60 },
+      },
+      {
+        id: 'node_2',
+        label: isJa ? '内容確認' : 'Triage',
+        shape: 'diamond',
+        color: '#fefce8',
+        subgraphId: 'lane_2',
+        position: { x: 340, y: 210 },
+      },
+      {
+        id: 'node_3',
+        label: isJa ? '回答を受領' : 'Receive Reply',
+        shape: 'rect',
+        color: '#ffffff',
+        subgraphId: 'lane_1',
+        position: { x: 540, y: 60 },
+      },
+    ],
+    edges: [
+      {
+        id: 'edge_1',
+        source: 'node_1',
+        target: 'node_2',
+        lineType: 'arrow',
+      },
+      {
+        id: 'edge_2',
+        source: 'node_2',
+        target: 'node_3',
+        label: isJa ? '完了' : 'Done',
+        lineType: 'arrow',
+      },
+    ],
+  };
+}
+
+export function detectMermaidDiagramType(code: string): MermaidDiagramType {
+  const lines = code.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
+      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
+      try {
+        const parsed: unknown = JSON.parse(jsonPart);
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'treeView' &&
+          Array.isArray((parsed as { nodes?: unknown }).nodes)
+        ) {
+          return 'treeView';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'gantt' &&
+          Array.isArray((parsed as { tasks?: unknown }).tasks)
+        ) {
+          return 'gantt';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'kanban' &&
+          Array.isArray((parsed as { columns?: unknown }).columns)
+        ) {
+          return 'kanban';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'pie' &&
+          Array.isArray((parsed as { slices?: unknown }).slices)
+        ) {
+          return 'pie';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'xychart' &&
+          Array.isArray((parsed as { series?: unknown }).series)
+        ) {
+          return 'xychart';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'architecture' &&
+          Array.isArray((parsed as { nodes?: unknown }).nodes)
+        ) {
+          return 'architecture';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'mindmap' &&
+          Array.isArray((parsed as { nodes?: unknown }).nodes)
+        ) {
+          return 'mindmap';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'quadrantChart' &&
+          Array.isArray((parsed as { points?: unknown }).points)
+        ) {
+          return 'quadrantChart';
+        }
+        if (isValidDiagramData(parsed) && parsed.diagramType === 'swimlane') {
+          return 'swimlane';
+        }
+      } catch {
+        // JSON解析失敗時はテキスト判定へフォールバックする
+      }
+    }
+  }
+  let inFrontmatter = false;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (i === 0 && trimmed === '---') {
+      inFrontmatter = true;
+      continue;
+    }
+    if (inFrontmatter) {
+      if (trimmed === '---') {
+        inFrontmatter = false;
+      }
+      continue;
+    }
+    if (!trimmed || trimmed.startsWith('%%')) {
+      continue;
+    }
+    if (/^treeView-beta\b/i.test(trimmed)) {
+      return 'treeView';
+    }
+    if (/^gantt\b/i.test(trimmed)) {
+      return 'gantt';
+    }
+    if (/^kanban\b/i.test(trimmed)) {
+      return 'kanban';
+    }
+    if (/^pie\b/i.test(trimmed)) {
+      return 'pie';
+    }
+    if (/^xychart(-beta)?\b/i.test(trimmed)) {
+      return 'xychart';
+    }
+    if (/^architecture(?:-beta)?\b/i.test(trimmed)) {
+      return 'architecture';
+    }
+    if (/^mindmap\b/i.test(trimmed)) {
+      return 'mindmap';
+    }
+    if (/^quadrantChart\b/i.test(trimmed)) {
+      return 'quadrantChart';
+    }
+    if (/^swimlane-beta\b/i.test(trimmed)) {
+      return 'swimlane';
+    }
+    break;
+  }
+  return 'flowchart';
 }
 
 function sanitizeId(rawId: string): string {
@@ -220,7 +412,11 @@ function emitNodeLines(lines: string[], node: MermaidNodeData, indent: string): 
 }
 
 export function generateMermaidCode(data: MermaidDiagramData): string {
-  const lines: string[] = [`flowchart ${data.direction}`];
+  const isSwimlane = data.diagramType === 'swimlane';
+  const headerLine = isSwimlane
+    ? `swimlane-beta ${data.direction}`
+    : `flowchart ${data.direction}`;
+  const lines: string[] = [headerLine];
 
   for (const comment of data.comments ?? []) {
     const clean = comment.replace(/\r?\n/g, ' ').trim();
@@ -250,7 +446,7 @@ export function generateMermaidCode(data: MermaidDiagramData): string {
     const sgId = sanitizeId(sg.id);
     const sgTitle = sanitizeMermaidText(sg.title || sg.id) || sgId;
     lines.push(`  subgraph ${sgId}["${sgTitle}"]`);
-    if (sg.direction) {
+    if (!isSwimlane && sg.direction) {
       lines.push(`    direction ${sg.direction}`);
     }
     for (const node of data.nodes) {
@@ -259,6 +455,14 @@ export function generateMermaidCode(data: MermaidDiagramData): string {
       }
     }
     lines.push('  end');
+
+    const sgStyleParts: string[] = [];
+    if (sg.fill && sg.fill !== '#ffffff') sgStyleParts.push(`fill:${sg.fill}`);
+    if (sg.stroke) sgStyleParts.push(`stroke:${sg.stroke}`);
+    if (sg.fill && sg.fill !== '#ffffff') sgStyleParts.push('color:#0f172a');
+    if (sgStyleParts.length > 0) {
+      lines.push(`  style ${sgId} ${sgStyleParts.join(',')}`);
+    }
   }
 
   for (const node of data.nodes) {
@@ -758,6 +962,7 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
     }
   }
 
+  let diagramType: 'flowchart' | 'swimlane' | undefined;
   let direction: MermaidDirection = 'TD';
   const nodeMap = new Map<string, Omit<MermaidNodeData, 'position'>>();
   const edges: MermaidEdgeData[] = [];
@@ -822,10 +1027,15 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
       continue;
     }
 
-    const headerMatch = trimmed.match(/^(?:flowchart|graph)\s+(TD|TB|LR|BT|RL)\b/i);
+    const headerMatch = trimmed.match(/^(?:flowchart|graph|swimlane-beta)(?:\s+(TD|TB|LR|BT|RL))?\b/i);
     if (headerMatch) {
-      const rawDir = headerMatch[1].toUpperCase();
-      direction = rawDir === 'TB' ? 'TD' : (rawDir as MermaidDirection);
+      if (/^swimlane-beta\b/i.test(trimmed)) {
+        diagramType = 'swimlane';
+      }
+      if (headerMatch[1]) {
+        const rawDir = headerMatch[1].toUpperCase();
+        direction = rawDir === 'TB' ? 'TD' : (rawDir as MermaidDirection);
+      }
       continue;
     }
 
@@ -902,6 +1112,14 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
         .map((s) => s.trim())
         .filter(Boolean);
       for (const id of ids) {
+        if (subgraphIds.has(id)) {
+          const sgTarget = subgraphs.find((sg) => sg.id === id);
+          if (sgTarget) {
+            if (props.fill) sgTarget.fill = props.fill;
+            if (props.stroke) sgTarget.stroke = props.stroke;
+          }
+          continue;
+        }
         const node = ensureNode({ id });
         if (props.fill) {
           node.color = props.fill;
@@ -998,6 +1216,7 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
   }));
 
   return {
+    ...(diagramType ? { diagramType } : {}),
     direction,
     nodes,
     edges,

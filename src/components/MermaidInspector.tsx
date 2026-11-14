@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
 import {
@@ -151,6 +151,62 @@ function sanitizeClassDefName(raw: string, fallbackIndex: number): string {
   return /^[a-zA-Z_]/.test(cleaned) ? cleaned : `c_${cleaned}`;
 }
 
+type InspectorSectionKey =
+  | 'direction'
+  | 'nodes'
+  | 'edges'
+  | 'subgraphs'
+  | 'classDefs'
+  | 'comments';
+
+const DEFAULT_OPEN_SECTIONS: Record<InspectorSectionKey, boolean> = {
+  direction: true,
+  nodes: true,
+  edges: false,
+  subgraphs: false,
+  classDefs: false,
+  comments: false,
+};
+
+interface InspectorCollapsibleSectionProps {
+  title: string;
+  badgeText?: string | number;
+  isOpen: boolean;
+  onToggle: () => void;
+  headerAction?: ReactNode;
+  children: ReactNode;
+}
+
+function InspectorCollapsibleSection({
+  title,
+  badgeText,
+  isOpen,
+  onToggle,
+  headerAction,
+  children,
+}: InspectorCollapsibleSectionProps) {
+  return (
+    <section className={`inspector-section ${isOpen ? 'is-open' : 'is-collapsed'}`}>
+      <div className="inspector-section-header">
+        <button
+          type="button"
+          className="inspector-collapse-toggle"
+          aria-expanded={isOpen}
+          onClick={onToggle}
+        >
+          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          <span className="inspector-heading">{title}</span>
+          {badgeText !== undefined && badgeText !== '' && (
+            <span className="inspector-section-badge">{badgeText}</span>
+          )}
+        </button>
+        {headerAction && <div className="inspector-section-action">{headerAction}</div>}
+      </div>
+      {isOpen && <div className="inspector-section-body">{children}</div>}
+    </section>
+  );
+}
+
 export default function MermaidInspector({
   diagramData,
   selectedNodeId,
@@ -160,6 +216,9 @@ export default function MermaidInspector({
   onSelectEdge,
 }: MermaidInspectorProps) {
   const { t } = useI18n();
+  const [openSections, setOpenSections] = useState<Record<InspectorSectionKey, boolean>>(
+    DEFAULT_OPEN_SECTIONS
+  );
   const [newEdgeSource, setNewEdgeSource] = useState<string>('');
   const [newEdgeTarget, setNewEdgeTarget] = useState<string>('');
   const [newEdgeLineType, setNewEdgeLineType] = useState<EdgeLineType>('arrow');
@@ -167,11 +226,47 @@ export default function MermaidInspector({
   const [newEdgeLabelStyle, setNewEdgeLabelStyle] = useState<EdgeLabelStyle>('pipe');
   const [newEdgeStrokeColor, setNewEdgeStrokeColor] = useState<string>('');
   const [newEdgeLabel, setNewEdgeLabel] = useState<string>('');
+  const isSwimlane = diagramData.diagramType === 'swimlane';
   const [newSubgraphTitle, setNewSubgraphTitle] = useState<string>('');
   const [newSubgraphDirection, setNewSubgraphDirection] = useState<MermaidDirection | ''>('');
+  const [newLaneFill, setNewLaneFill] = useState<string>('#eff6ff');
+  const [newLaneStroke, setNewLaneStroke] = useState<string>('#2563eb');
   const [newClassName, setNewClassName] = useState<string>('');
   const [newClassFill, setNewClassFill] = useState<string>('#eff6ff');
   const [newClassStroke, setNewClassStroke] = useState<string>('#2563eb');
+
+  useEffect(() => {
+    if (isSwimlane) {
+      setOpenSections((prev) => (prev.subgraphs ? prev : { ...prev, subgraphs: true }));
+    }
+  }, [isSwimlane]);
+
+  useEffect(() => {
+    if (selectedNodeId) {
+      setOpenSections((prev) => (prev.nodes ? prev : { ...prev, nodes: true }));
+    }
+  }, [selectedNodeId]);
+
+  useEffect(() => {
+    if (selectedEdgeId) {
+      setOpenSections((prev) => (prev.edges ? prev : { ...prev, edges: true }));
+    }
+  }, [selectedEdgeId]);
+
+  const toggleSection = (key: InspectorSectionKey): void => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const setAllSectionsOpen = (nextOpen: boolean): void => {
+    setOpenSections({
+      direction: nextOpen,
+      nodes: nextOpen,
+      edges: nextOpen,
+      subgraphs: nextOpen,
+      classDefs: nextOpen,
+      comments: nextOpen,
+    });
+  };
 
   useEffect(() => {
     const nodes = diagramData.nodes;
@@ -197,18 +292,43 @@ export default function MermaidInspector({
     onChange({ ...diagramData, direction });
   };
 
-  const handleAddNode = (): void => {
+  const handleAddNode = (targetLaneId?: string): void => {
     const nextId = createUniqueNodeId(diagramData.nodes);
     const count = diagramData.nodes.length;
+    const assignedLaneId = isSwimlane
+      ? targetLaneId ?? subgraphs[0]?.id
+      : undefined;
+
+    let position = {
+      x: (count % 3) * 200 + 80,
+      y: Math.floor(count / 3) * 130 + 60,
+    };
+
+    if (isSwimlane) {
+      const laneIdx = Math.max(
+        0,
+        subgraphs.findIndex((sg) => sg.id === assignedLaneId)
+      );
+      const membersInLane = diagramData.nodes.filter(
+        (n) => n.subgraphId === assignedLaneId
+      ).length;
+      const isHorizontalLane =
+        diagramData.direction === 'LR' || diagramData.direction === 'RL';
+
+      position = isHorizontalLane
+        ? { x: 140 + membersInLane * 200, y: 60 + laneIdx * 150 }
+        : { x: 60 + laneIdx * 240, y: 70 + membersInLane * 130 };
+    }
+
     const newNode: MermaidNodeData = {
       id: nextId,
-      label: t.inspector.defaultNewNodeLabel(count + 1),
+      label: isSwimlane
+        ? t.inspector.swimlane.defaultStepTitle(count + 1)
+        : t.inspector.defaultNewNodeLabel(count + 1),
       shape: 'rect',
       color: '#ffffff',
-      position: {
-        x: (count % 3) * 200 + 80,
-        y: Math.floor(count / 3) * 130 + 60,
-      },
+      ...(assignedLaneId ? { subgraphId: assignedLaneId } : {}),
+      position,
     };
 
     onChange({
@@ -303,11 +423,15 @@ export default function MermaidInspector({
   const handleAddSubgraph = (): void => {
     const nextId = createUniqueSubgraphId(subgraphs);
     const nextTitle =
-      newSubgraphTitle.trim() || t.inspector.defaultSubgraphTitle(subgraphs.length + 1);
+      newSubgraphTitle.trim() ||
+      (isSwimlane
+        ? t.inspector.swimlane.defaultLaneTitle(subgraphs.length + 1)
+        : t.inspector.defaultSubgraphTitle(subgraphs.length + 1));
     const nextSubgraph: MermaidSubgraphData = {
       id: nextId,
       title: nextTitle,
-      ...(newSubgraphDirection ? { direction: newSubgraphDirection } : {}),
+      ...(!isSwimlane && newSubgraphDirection ? { direction: newSubgraphDirection } : {}),
+      ...(isSwimlane ? { fill: newLaneFill, stroke: newLaneStroke } : {}),
     };
     onChange({
       ...diagramData,
@@ -315,6 +439,21 @@ export default function MermaidInspector({
     });
     setNewSubgraphTitle('');
     setNewSubgraphDirection('');
+  };
+
+  const handleMoveSubgraph = (subgraphId: string, delta: -1 | 1): void => {
+    const index = subgraphs.findIndex((sg) => sg.id === subgraphId);
+    const nextIndex = index + delta;
+    if (index < 0 || nextIndex < 0 || nextIndex >= subgraphs.length) {
+      return;
+    }
+    const nextSubgraphs = [...subgraphs];
+    const [moved] = nextSubgraphs.splice(index, 1);
+    nextSubgraphs.splice(nextIndex, 0, moved);
+    onChange({
+      ...diagramData,
+      subgraphs: nextSubgraphs,
+    });
   };
 
   const handleUpdateSubgraph = (
@@ -379,34 +518,288 @@ export default function MermaidInspector({
     });
   };
 
+  const commentLineCount = (diagramData.comments ?? []).filter((c) => c.trim().length > 0).length;
+
+  const subgraphsOrLanesSection = (
+    <InspectorCollapsibleSection
+      title={isSwimlane ? t.inspector.swimlane.lanesHeading : t.inspector.subgraphsHeading}
+      badgeText={isSwimlane ? subgraphs.length : subgraphs.length > 0 ? subgraphs.length : undefined}
+      isOpen={openSections.subgraphs}
+      onToggle={() => toggleSection('subgraphs')}
+    >
+      <div className="edge-add-card">
+        {isSwimlane ? (
+          <>
+            <label className="inspector-field">
+              <span>{t.inspector.swimlane.laneTitleField}</span>
+              <GuardedInput
+                value={newSubgraphTitle}
+                onChangeValue={(nextVal) => setNewSubgraphTitle(nextVal)}
+                forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                formatError={t.inspector.safeguard.syntaxErrorChars}
+                placeholder={t.inspector.swimlane.laneTitlePlaceholder}
+              />
+            </label>
+            <div className="edge-add-grid">
+              <label className="inspector-field">
+                <span>{t.inspector.swimlane.laneFillField}</span>
+                <select
+                  value={newLaneFill}
+                  onChange={(event) => setNewLaneFill(event.target.value)}
+                >
+                  {COLOR_PALETTE_ITEMS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {t.inspector.colors[item.key]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="inspector-field">
+                <span>{t.inspector.swimlane.laneStrokeField}</span>
+                <select
+                  value={newLaneStroke}
+                  onChange={(event) => setNewLaneStroke(event.target.value)}
+                >
+                  {STROKE_COLOR_PALETTE_ITEMS.filter((item) => item.value !== '').map((item) => (
+                    <option key={item.key} value={item.value}>
+                      {t.inspector.strokeColors[item.key]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </>
+        ) : (
+          <div className="edge-add-grid">
+            <label className="inspector-field">
+              <span>{t.inspector.subgraphTitleField}</span>
+              <GuardedInput
+                value={newSubgraphTitle}
+                onChangeValue={(nextVal) => setNewSubgraphTitle(nextVal)}
+                forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                formatError={t.inspector.safeguard.syntaxErrorChars}
+                placeholder={t.inspector.subgraphTitlePlaceholder}
+              />
+            </label>
+
+            <label className="inspector-field">
+              <span>{t.inspector.subgraphDirectionField}</span>
+              <select
+                value={newSubgraphDirection}
+                onChange={(event) =>
+                  setNewSubgraphDirection((event.target.value as MermaidDirection) || '')
+                }
+              >
+                <option value="">{t.inspector.subgraphDirectionInherit}</option>
+                {DIRECTION_VALUES.map((dir) => (
+                  <option key={dir} value={dir}>
+                    {t.inspector.directions[dir]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        <button type="button" className="btn-primary btn-full" onClick={handleAddSubgraph}>
+          <Plus size={14} />
+          <span>{isSwimlane ? t.inspector.swimlane.addLaneBtn : t.inspector.addSubgraphBtn}</span>
+        </button>
+      </div>
+
+      <div className="edge-list-container">
+        {subgraphs.length === 0 ? (
+          <p className="inspector-hint">
+            {isSwimlane ? t.inspector.swimlane.noLanesHint : t.inspector.noSubgraphsHint}
+          </p>
+        ) : (
+          subgraphs.map((sg, idx) => (
+            <div key={sg.id} className="edge-list-item">
+              <div className="edge-item-row">
+                {isSwimlane && (
+                  <div className="lane-reorder-group">
+                    <button
+                      type="button"
+                      className="btn-icon-subtle"
+                      title={t.inspector.swimlane.moveUpTitle}
+                      disabled={idx === 0}
+                      onClick={() => handleMoveSubgraph(sg.id, -1)}
+                    >
+                      <ArrowUp size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon-subtle"
+                      title={t.inspector.swimlane.moveDownTitle}
+                      disabled={idx === subgraphs.length - 1}
+                      onClick={() => handleMoveSubgraph(sg.id, 1)}
+                    >
+                      <ArrowDown size={12} />
+                    </button>
+                  </div>
+                )}
+
+                <GuardedInput
+                  ariaLabel={
+                    isSwimlane ? t.inspector.swimlane.laneTitleField : t.inspector.subgraphTitleField
+                  }
+                  value={sg.title}
+                  onChangeValue={(nextVal) =>
+                    handleUpdateSubgraph(sg.id, { title: nextVal })
+                  }
+                  forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                  formatError={t.inspector.safeguard.syntaxErrorChars}
+                />
+
+                {isSwimlane ? (
+                  <button
+                    type="button"
+                    className="btn-icon-add-step"
+                    title={t.inspector.swimlane.addStepToLaneTitle}
+                    onClick={() => {
+                      setOpenSections((prev) => ({ ...prev, nodes: true }));
+                      handleAddNode(sg.id);
+                    }}
+                  >
+                    <Plus size={14} />
+                  </button>
+                ) : (
+                  <select
+                    aria-label={t.inspector.subgraphDirectionField}
+                    value={sg.direction ?? ''}
+                    onChange={(event) =>
+                      handleUpdateSubgraph(sg.id, {
+                        direction: (event.target.value as MermaidDirection) || undefined,
+                      })
+                    }
+                  >
+                    <option value="">{t.inspector.subgraphDirectionInherit}</option>
+                    {DIRECTION_VALUES.map((dir) => (
+                      <option key={dir} value={dir}>
+                        {t.inspector.directions[dir]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <button
+                  type="button"
+                  className="btn-icon-danger"
+                  title={
+                    isSwimlane ? t.inspector.swimlane.deleteLaneTitle : t.inspector.deleteSubgraphTitle
+                  }
+                  onClick={() => handleDeleteSubgraph(sg.id)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+
+              {isSwimlane && (
+                <div className="edge-item-row">
+                  <select
+                    aria-label={t.inspector.swimlane.laneFillField}
+                    value={sg.fill ?? '#ffffff'}
+                    onChange={(event) =>
+                      handleUpdateSubgraph(sg.id, {
+                        fill: event.target.value === '#ffffff' ? undefined : event.target.value,
+                      })
+                    }
+                  >
+                    {COLOR_PALETTE_ITEMS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {t.inspector.colors[item.key]}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    aria-label={t.inspector.swimlane.laneStrokeField}
+                    value={sg.stroke ?? ''}
+                    onChange={(event) =>
+                      handleUpdateSubgraph(sg.id, {
+                        stroke: event.target.value || undefined,
+                      })
+                    }
+                  >
+                    {STROKE_COLOR_PALETTE_ITEMS.map((item) => (
+                      <option key={item.key} value={item.value}>
+                        {t.inspector.strokeColors[item.key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </InspectorCollapsibleSection>
+  );
+
   return (
     <aside className="inspector-panel">
-      <section className="inspector-section">
-        <h3 className="inspector-heading">{t.inspector.directionHeading}</h3>
+      <div className="inspector-accordion-controls">
+        <button
+          type="button"
+          className="inspector-accordion-ctrl-btn"
+          onClick={() => setAllSectionsOpen(true)}
+        >
+          {t.inspector.expandAllSections}
+        </button>
+        <button
+          type="button"
+          className="inspector-accordion-ctrl-btn"
+          onClick={() => setAllSectionsOpen(false)}
+        >
+          {t.inspector.collapseAllSections}
+        </button>
+      </div>
+
+      {isSwimlane && subgraphsOrLanesSection}
+
+      <InspectorCollapsibleSection
+        title={t.inspector.directionHeading}
+        badgeText={diagramData.direction}
+        isOpen={openSections.direction}
+        onToggle={() => toggleSection('direction')}
+      >
         <div className="direction-grid">
           {DIRECTION_VALUES.map((directionValue) => (
             <button
               key={directionValue}
               type="button"
-              className={`inspector-choice-btn ${
-                diagramData.direction === directionValue ? 'is-active' : ''
-              }`}
+              className={`inspector-choice-btn ${diagramData.direction === directionValue ? 'is-active' : ''
+                }`}
               onClick={() => handleDirectionChange(directionValue)}
             >
-              {t.inspector.directions[directionValue]}
+              {isSwimlane
+                ? t.inspector.swimlane.directions[directionValue]
+                : t.inspector.directions[directionValue]}
             </button>
           ))}
         </div>
-      </section>
+      </InspectorCollapsibleSection>
 
-      <section className="inspector-section">
-        <div className="inspector-section-header">
-          <h3 className="inspector-heading">{t.inspector.nodesHeading}</h3>
-          <button type="button" className="btn-primary btn-sm" onClick={handleAddNode}>
+      <InspectorCollapsibleSection
+        title={isSwimlane ? t.inspector.swimlane.nodesHeading : t.inspector.nodesHeading}
+        badgeText={diagramData.nodes.length}
+        isOpen={openSections.nodes}
+        onToggle={() => toggleSection('nodes')}
+        headerAction={
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            onClick={() => {
+              setOpenSections((prev) => ({ ...prev, nodes: true }));
+              handleAddNode();
+            }}
+          >
             <Plus size={14} />
-            <span>{t.inspector.addNodeBtn}</span>
+            <span>{isSwimlane ? t.inspector.swimlane.addNodeBtn : t.inspector.addNodeBtn}</span>
           </button>
-        </div>
+        }
+      >
 
         <label className="inspector-field">
           <span>{t.inspector.targetNodeLabel}</span>
@@ -450,9 +843,8 @@ export default function MermaidInspector({
                       key={shapeValue}
                       type="button"
                       title={`${shapeInfo.syntax} (${shapeInfo.meaning})`}
-                      className={`shape-choice-btn ${
-                        selectedNode.shape === shapeValue ? 'is-active' : ''
-                      }`}
+                      className={`shape-choice-btn ${selectedNode.shape === shapeValue ? 'is-active' : ''
+                        }`}
                       onClick={() => handleUpdateSelectedNode({ shape: shapeValue })}
                     >
                       <ShapeMiniIcon shape={shapeValue} />
@@ -474,9 +866,8 @@ export default function MermaidInspector({
                     key={color.value}
                     type="button"
                     title={t.inspector.colors[color.key]}
-                    className={`color-swatch-btn ${
-                      (selectedNode.color || '#ffffff') === color.value ? 'is-active' : ''
-                    }`}
+                    className={`color-swatch-btn ${(selectedNode.color || '#ffffff') === color.value ? 'is-active' : ''
+                      }`}
                     style={{ backgroundColor: color.value }}
                     onClick={() => handleUpdateSelectedNode({ color: color.value })}
                   />
@@ -492,9 +883,8 @@ export default function MermaidInspector({
                     key={stroke.key}
                     type="button"
                     title={t.inspector.strokeColors[stroke.key]}
-                    className={`color-swatch-btn stroke-swatch ${
-                      (selectedNode.strokeColor || '') === stroke.value ? 'is-active' : ''
-                    }`}
+                    className={`color-swatch-btn stroke-swatch ${(selectedNode.strokeColor || '') === stroke.value ? 'is-active' : ''
+                      }`}
                     style={{
                       backgroundColor: '#ffffff',
                       borderColor: stroke.value || '#cbd5e1',
@@ -510,7 +900,9 @@ export default function MermaidInspector({
 
             <div className="edge-add-grid">
               <label className="inspector-field">
-                <span>{t.inspector.nodeSubgraphField}</span>
+                <span>
+                  {isSwimlane ? t.inspector.swimlane.nodeLaneField : t.inspector.nodeSubgraphField}
+                </span>
                 <select
                   value={selectedNode.subgraphId ?? ''}
                   onChange={(event) =>
@@ -519,7 +911,9 @@ export default function MermaidInspector({
                     })
                   }
                 >
-                  <option value="">{t.inspector.noSubgraphOption}</option>
+                  <option value="">
+                    {isSwimlane ? t.inspector.swimlane.noLaneOption : t.inspector.noSubgraphOption}
+                  </option>
                   {subgraphs.map((sg) => (
                     <option key={sg.id} value={sg.id}>
                       {sg.title || sg.id} ({sg.id})
@@ -593,10 +987,14 @@ export default function MermaidInspector({
         ) : (
           <p className="inspector-hint">{t.inspector.selectNodeHint}</p>
         )}
-      </section>
+      </InspectorCollapsibleSection>
 
-      <section className="inspector-section">
-        <h3 className="inspector-heading">{t.inspector.edgesHeading}</h3>
+      <InspectorCollapsibleSection
+        title={t.inspector.edgesHeading}
+        badgeText={diagramData.edges.length}
+        isOpen={openSections.edges}
+        onToggle={() => toggleSection('edges')}
+      >
 
         <div className="edge-add-card">
           <div className="edge-add-grid">
@@ -850,96 +1248,16 @@ export default function MermaidInspector({
             ))
           )}
         </div>
-      </section>
+      </InspectorCollapsibleSection>
 
-      <section className="inspector-section">
-        <h3 className="inspector-heading">{t.inspector.subgraphsHeading}</h3>
-        <div className="edge-add-card">
-          <div className="edge-add-grid">
-            <label className="inspector-field">
-              <span>{t.inspector.subgraphTitleField}</span>
-              <GuardedInput
-                value={newSubgraphTitle}
-                onChangeValue={(nextVal) => setNewSubgraphTitle(nextVal)}
-                forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
-                formatError={t.inspector.safeguard.syntaxErrorChars}
-                placeholder={t.inspector.subgraphTitlePlaceholder}
-              />
-            </label>
+      {!isSwimlane && subgraphsOrLanesSection}
 
-            <label className="inspector-field">
-              <span>{t.inspector.subgraphDirectionField}</span>
-              <select
-                value={newSubgraphDirection}
-                onChange={(event) =>
-                  setNewSubgraphDirection((event.target.value as MermaidDirection) || '')
-                }
-              >
-                <option value="">{t.inspector.subgraphDirectionInherit}</option>
-                {DIRECTION_VALUES.map((dir) => (
-                  <option key={dir} value={dir}>
-                    {t.inspector.directions[dir]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <button type="button" className="btn-primary btn-full" onClick={handleAddSubgraph}>
-            <Plus size={14} />
-            <span>{t.inspector.addSubgraphBtn}</span>
-          </button>
-        </div>
-
-        <div className="edge-list-container">
-          {subgraphs.length === 0 ? (
-            <p className="inspector-hint">{t.inspector.noSubgraphsHint}</p>
-          ) : (
-            subgraphs.map((sg) => (
-              <div key={sg.id} className="edge-list-item">
-                <div className="edge-item-row">
-                  <GuardedInput
-                    ariaLabel={t.inspector.subgraphTitleField}
-                    value={sg.title}
-                    onChangeValue={(nextVal) =>
-                      handleUpdateSubgraph(sg.id, { title: nextVal })
-                    }
-                    forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
-                    formatError={t.inspector.safeguard.syntaxErrorChars}
-                  />
-                  <select
-                    aria-label={t.inspector.subgraphDirectionField}
-                    value={sg.direction ?? ''}
-                    onChange={(event) =>
-                      handleUpdateSubgraph(sg.id, {
-                        direction: (event.target.value as MermaidDirection) || undefined,
-                      })
-                    }
-                  >
-                    <option value="">{t.inspector.subgraphDirectionInherit}</option>
-                    {DIRECTION_VALUES.map((dir) => (
-                      <option key={dir} value={dir}>
-                        {t.inspector.directions[dir]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn-icon-danger"
-                    title={t.inspector.deleteSubgraphTitle}
-                    onClick={() => handleDeleteSubgraph(sg.id)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="inspector-section">
-        <h3 className="inspector-heading">{t.inspector.classDefsHeading}</h3>
+      <InspectorCollapsibleSection
+        title={t.inspector.classDefsHeading}
+        badgeText={classDefs.length > 0 ? classDefs.length : undefined}
+        isOpen={openSections.classDefs}
+        onToggle={() => toggleSection('classDefs')}
+      >
         <div className="edge-add-card">
           <label className="inspector-field">
             <span>{t.inspector.classNameField}</span>
@@ -1016,10 +1334,14 @@ export default function MermaidInspector({
             ))
           )}
         </div>
-      </section>
+      </InspectorCollapsibleSection>
 
-      <section className="inspector-section">
-        <h3 className="inspector-heading">{t.inspector.commentsHeading}</h3>
+      <InspectorCollapsibleSection
+        title={t.inspector.commentsHeading}
+        badgeText={commentLineCount > 0 ? commentLineCount : undefined}
+        isOpen={openSections.comments}
+        onToggle={() => toggleSection('comments')}
+      >
         <label className="inspector-field">
           <span>{t.inspector.commentsField}</span>
           <textarea
@@ -1030,7 +1352,7 @@ export default function MermaidInspector({
             placeholder={t.inspector.commentsPlaceholder}
           />
         </label>
-      </section>
+      </InspectorCollapsibleSection>
     </aside>
   );
 }

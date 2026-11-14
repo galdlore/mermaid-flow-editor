@@ -1,4 +1,16 @@
 export const FORBIDDEN_LABEL_CHARS_REGEX = /["()[\]{}|<>\\;]/g;
+export const FORBIDDEN_GANTT_LABEL_CHARS_REGEX = /[:#;"()[\]{}|<>\\]/g;
+export const FORBIDDEN_KANBAN_LABEL_CHARS_REGEX = /["'()[\]{}|<>\\;@]/g;
+export const FORBIDDEN_KANBAN_META_CHARS_REGEX = /["'{}\\]/g;
+export const FORBIDDEN_PIE_LABEL_CHARS_REGEX = /["\r\n]/g;
+export const FORBIDDEN_XYCHART_TEXT_CHARS_REGEX = /["\r\n]/g;
+export const FORBIDDEN_ARCHITECTURE_TITLE_CHARS_REGEX = /[\[\]\r\n"]/g;
+export const FORBIDDEN_ARCHITECTURE_ICON_CHARS_REGEX = /[^a-zA-Z0-9_:-]/g;
+export const FORBIDDEN_MINDMAP_LABEL_CHARS_REGEX = /[()[\]{}"`\r\n]/g;
+export const FORBIDDEN_MINDMAP_ICON_CHARS_REGEX = /[)\r\n]/g;
+export const FORBIDDEN_MINDMAP_CLASS_CHARS_REGEX = /[^a-zA-Z0-9_ -]/g;
+export const FORBIDDEN_QUADRANT_TEXT_CHARS_REGEX = /["\r\n]/g;
+export const FORBIDDEN_QUADRANT_CLASS_CHARS_REGEX = /[^a-zA-Z0-9]/g;
 export const FORBIDDEN_URL_CHARS_REGEX = /["\s]/g;
 export const FORBIDDEN_CLASS_NAME_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
 

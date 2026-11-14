@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -14,6 +15,28 @@ import remarkGfm from 'remark-gfm';
 import { Pencil } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { renderMermaidSvg } from '../utils/mermaidRender';
+import {
+  computeTabIndentEdit,
+  TAB_SIZE_OPTIONS,
+  type TabSizeOption,
+} from '../utils/markdownTabIndent';
+
+const TAB_SIZE_STORAGE_KEY = 'mermaid-flow-editor:tab-size';
+
+function loadInitialTabSize(): TabSizeOption {
+  if (typeof window === 'undefined') {
+    return 2;
+  }
+  try {
+    const raw = Number(window.localStorage.getItem(TAB_SIZE_STORAGE_KEY));
+    if (raw === 4) {
+      return 4;
+    }
+  } catch {
+    // ストレージ参照不可時は規定値を使う
+  }
+  return 2;
+}
 
 export interface MarkdownEditorHandle {
   insertAtCursor: (text: string) => void;
@@ -132,8 +155,20 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
   function MarkdownEditor({ value, onChange, onEditMermaid }, ref) {
     const { t } = useI18n();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
 
     const mermaidBlocks = useMemo(() => extractMermaidBlocks(value), [value]);
+
+    const handleTabSizeChange = (nextSize: TabSizeOption): void => {
+      setTabSize(nextSize);
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(TAB_SIZE_STORAGE_KEY, String(nextSize));
+        } catch {
+          // ストレージ保存エラーは無視する
+        }
+      }
+    };
 
     const applyEdit = (
       nextValue: string,
@@ -223,15 +258,61 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       return Boolean(children.props.className && /language-mermaid\b/.test(children.props.className));
     };
 
+    const handleTextareaKeyDown = (
+      event: KeyboardEvent<HTMLTextAreaElement>
+    ): void => {
+      if (
+        event.key !== 'Tab' ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.nativeEvent.isComposing
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      const target = event.currentTarget;
+      const result = computeTabIndentEdit(
+        value,
+        target.selectionStart,
+        target.selectionEnd,
+        tabSize,
+        event.shiftKey
+      );
+      applyEdit(result.nextValue, result.nextStart, result.nextEnd);
+    };
+
     return (
       <div className="editor-split-pane">
         <section className="editor-pane-left">
-          <div className="pane-header">{t.editor.editorPaneHeader}</div>
+          <div className="pane-header">
+            <span>{t.editor.editorPaneHeader}</span>
+            <label className="pane-tab-size-control">
+              <span>{t.editor.tabSizeLabel}</span>
+              <select
+                className="pane-tab-size-select"
+                aria-label={t.editor.tabSizeLabel}
+                value={tabSize}
+                onChange={(event) =>
+                  handleTabSizeChange(Number(event.target.value) === 4 ? 4 : 2)
+                }
+              >
+                {TAB_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {t.editor.tabSpacesOption(size)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <textarea
             ref={textareaRef}
             className="markdown-textarea"
+            style={{ tabSize }}
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            onKeyDown={handleTextareaKeyDown}
             placeholder={t.editor.editorPlaceholder}
             spellCheck={false}
           />
