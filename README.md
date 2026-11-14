@@ -62,3 +62,20 @@ npm run build:extension
 ```
 
 ストアへ提出するZIPファイルまで一括で作成したい場合は、ルートにある`extensionbuild.bat`を実行してください。処理が終わると直下に`manifest.json`を含む`mermaid-flow-editor-extension.zip`が出力されます。コマンドが成功すると、`dist-extension`フォルダへも必要なファイル一式が出力されます。次にChromeのアドレスバーへ`chrome://extensions`と入力して拡張機能管理画面を開いてください。画面右上のデベロッパーモードを有効にしたあと、「パッケージ化されていない拡張機能を読み込む」から`dist-extension`フォルダを選ぶと導入が完了します。ツールバーの拡張機能アイコンを押すと、専用タブでエディタ画面が立ち上がります。
+
+## Docker（Raspberry Piサーバ対応）での起動手順
+
+Webブラウザから利用できる静的配信版として、Dockerコンテナで起動できます。`node:22-alpine` と `nginx:1.27-alpine` をベースにしているため、PC（x86_64）だけでなく Raspberry Pi（ARM64 / ARMv7）でもそのままビルドと実行が可能です。
+
+他の一般的なサービスや開発用ポート（3000、8080、9000など）と重複しにくいよう、初期設定の公開ポートには `18420` を割り当てています。
+
+```bash
+# コンテナのビルドとバックグラウンド起動
+docker compose up -d --build
+```
+
+起動後はブラウザから `http://<サーバのIPアドレス>:18420` へアクセスしてください。公開ポートを変更したい場合は、環境変数 `APP_PORT` を指定して起動します。
+
+```bash
+APP_PORT=18421 docker compose up -d
+```

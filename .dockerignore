@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-electron/
+dist-chrome/
+dist-extension/
+release/
+*.zip
+.git/
+.vite/
+secret/
+electron/
+chrome/
+docs/
+*.log
+*.local
+.DS_Store
+Thumbs.db

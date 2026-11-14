@@ -1,0 +1,9 @@
+services:
+  mermaid-editor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mermaid-flow-editor
+    ports:
+      - "${APP_PORT:-18420}:80"
+    restart: unless-stopped
