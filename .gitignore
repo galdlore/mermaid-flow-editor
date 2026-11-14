@@ -1,0 +1,15 @@
+# 依存パッケージとビルド成果物
+node_modules/
+dist/
+dist-electron/
+release/
+
+# ローカル環境・エディタ設定
+.vite/
+*.log
+*.local
+.DS_Store
+Thumbs.db
+
+# 開発時の作業用指示書フォルダ
+secret/

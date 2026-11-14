@@ -1,0 +1,51 @@
+{
+  "name": "mermaid-gui-markdown-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows 11 GUI Markdown and Mermaid Editor",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm run electron:dev\"",
+    "electron:dev": "wait-on http://localhost:5173 && npm run compile:electron && node -e \"const env={...process.env,VITE_DEV_SERVER_URL:'http://localhost:5173'};delete env.ELECTRON_RUN_AS_NODE;require('child_process').spawn(require('electron'),['.'],{env,stdio:'inherit'}).on('exit',c=>process.exit(c||0))\"",
+    "compile:electron": "tsc -p tsconfig.electron.json",
+    "build": "tsc --noEmit && npm run compile:electron && vite build",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.3.5",
+    "lucide-react": "^0.460.0",
+    "mermaid": "^11.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.example.mermaid-markdown-editor",
+    "productName": "Mermaid Markdown Editor",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true,
+    "esbuild@0.25.12": true
+  }
+}
