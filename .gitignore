@@ -2,6 +2,9 @@
 node_modules/
 dist/
 dist-electron/
+dist-chrome/
+dist-extension/
+mermaid-flow-editor-extension.zip
 release/
 
 # ローカル環境・エディタ設定

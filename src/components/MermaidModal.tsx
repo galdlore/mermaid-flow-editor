@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Check, X } from 'lucide-react';
+import { useI18n } from '../i18n';
 import type { MermaidDiagramData } from '../types/editor';
 import {
   createDefaultDiagramData,
@@ -23,9 +24,10 @@ export default function MermaidModal({
   onApply,
   onClose,
 }: MermaidModalProps) {
+  const { lang, t } = useI18n();
   const reactId = useId();
   const [diagramData, setDiagramData] = useState<MermaidDiagramData>(() =>
-    createDefaultDiagramData()
+    createDefaultDiagramData(lang)
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -40,13 +42,13 @@ export default function MermaidModal({
 
     const initialized = initialCode.trim()
       ? parseMermaidCodeToGuiData(initialCode)
-      : createDefaultDiagramData();
+      : createDefaultDiagramData(lang);
 
     setDiagramData(initialized);
     setSelectedNodeId(initialized.nodes[0]?.id ?? null);
     setSelectedEdgeId(null);
     setBottomTab('preview');
-  }, [isOpen, initialCode]);
+  }, [isOpen, initialCode, lang]);
 
   const generatedCode = useMemo(
     () => generateMermaidCode(diagramData),
@@ -89,19 +91,17 @@ export default function MermaidModal({
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Mermaid GUIエディタ">
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t.modal.ariaLabel}>
       <div className="mermaid-modal">
         <header className="modal-header">
           <div className="modal-title-group">
-            <h2>Mermaid図 GUIエディタ</h2>
-            <span className="modal-subtitle">
-              キャンバスのドラッグ接続と右側プルダウンの両方で編集できます
-            </span>
+            <h2>{t.modal.title}</h2>
+            <span className="modal-subtitle">{t.modal.subtitle}</span>
           </div>
           <div className="modal-header-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>
               <X size={15} />
-              <span>キャンセル</span>
+              <span>{t.modal.cancel}</span>
             </button>
             <button
               type="button"
@@ -109,7 +109,7 @@ export default function MermaidModal({
               onClick={() => onApply(generatedCode)}
             >
               <Check size={15} />
-              <span>Markdownに反映</span>
+              <span>{t.modal.apply}</span>
             </button>
           </div>
         </header>
@@ -145,26 +145,24 @@ export default function MermaidModal({
               className={`modal-tab-btn ${bottomTab === 'preview' ? 'is-active' : ''}`}
               onClick={() => setBottomTab('preview')}
             >
-              Mermaid描画プレビュー
+              {t.modal.tabPreview}
             </button>
             <button
               type="button"
               className={`modal-tab-btn ${bottomTab === 'code' ? 'is-active' : ''}`}
               onClick={() => setBottomTab('code')}
             >
-              生成されたMermaidコード
+              {t.modal.tabCode}
             </button>
           </div>
 
           <div className="modal-bottom-content">
             {bottomTab === 'preview' ? (
               diagramData.nodes.length === 0 ? (
-                <div className="modal-empty-preview">
-                  右側のパネルから「要素を追加」を押すと図が表示されます。
-                </div>
+                <div className="modal-empty-preview">{t.modal.emptyPreviewHint}</div>
               ) : previewError ? (
                 <div className="mermaid-error-box">
-                  <strong>プレビュー描画エラー</strong>
+                  <strong>{t.modal.previewErrorTitle}</strong>
                   <pre>{previewError}</pre>
                 </div>
               ) : (

@@ -12,6 +12,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Pencil } from 'lucide-react';
+import { useI18n } from '../i18n';
 import { renderMermaidSvg } from '../utils/mermaidRender';
 
 export interface MarkdownEditorHandle {
@@ -71,6 +72,7 @@ interface MermaidPreviewBlockProps {
 }
 
 function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockProps) {
+  const { t } = useI18n();
   const reactId = useId();
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,7 @@ function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockPr
       if (!code.trim()) {
         if (!cancelled) {
           setSvg('');
-          setError('Mermaidコードが空です。');
+          setError(t.editor.emptyMermaidError);
         }
         return;
       }
@@ -100,7 +102,7 @@ function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockPr
     return () => {
       cancelled = true;
     };
-  }, [code, reactId]);
+  }, [code, reactId, t.editor.emptyMermaidError]);
 
   return (
     <div className="mermaid-preview-card" data-mermaid-block="true">
@@ -108,15 +110,15 @@ function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockPr
         type="button"
         className="mermaid-edit-float-btn"
         onClick={() => onEdit(blockIndex, code)}
-        title="この図をGUIで編集"
+        title={t.editor.editDiagramTitle}
       >
         <Pencil size={14} />
-        <span>この図をGUIで編集</span>
+        <span>{t.editor.editDiagramLabel}</span>
       </button>
 
       {error ? (
         <div className="mermaid-error-box">
-          <strong>図の描画エラー</strong>
+          <strong>{t.editor.renderErrorTitle}</strong>
           <pre>{error}</pre>
         </div>
       ) : (
@@ -128,6 +130,7 @@ function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockPr
 
 const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
   function MarkdownEditor({ value, onChange, onEditMermaid }, ref) {
+    const { t } = useI18n();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const mermaidBlocks = useMemo(() => extractMermaidBlocks(value), [value]);
@@ -223,19 +226,19 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     return (
       <div className="editor-split-pane">
         <section className="editor-pane-left">
-          <div className="pane-header">Markdown編集</div>
+          <div className="pane-header">{t.editor.editorPaneHeader}</div>
           <textarea
             ref={textareaRef}
             className="markdown-textarea"
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            placeholder="ここにMarkdownを入力するか、上部のボタンから要素を挿入してください。"
+            placeholder={t.editor.editorPlaceholder}
             spellCheck={false}
           />
         </section>
 
         <section className="editor-pane-right">
-          <div className="pane-header">リアルタイムプレビュー</div>
+          <div className="pane-header">{t.editor.previewPaneHeader}</div>
           <div className="markdown-preview-scroll">
             <div className="markdown-preview-body">
               <ReactMarkdown

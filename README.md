@@ -51,3 +51,14 @@ npm run dist
 | `Ctrl + S` | 上書き保存する |
 | `Ctrl + Shift + S` | 名前を付けて保存する |
 | `Escape` | Mermaid図のGUI編集モーダルを閉じる |
+
+## Chrome拡張機能としての導入手順
+
+Windows版のほかに、Chrome拡張機能版としてもビルドして利用できます。インストーラの申請が不要なため、利用中のブラウザへ手軽に組み込める構成です。
+
+```bash
+# Chrome拡張機能パッケージの作成
+npm run build:extension
+```
+
+ストアへ提出するZIPファイルまで一括で作成したい場合は、ルートにある`extensionbuild.bat`を実行してください。処理が終わると直下に`manifest.json`を含む`mermaid-flow-editor-extension.zip`が出力されます。コマンドが成功すると、`dist-extension`フォルダへも必要なファイル一式が出力されます。次にChromeのアドレスバーへ`chrome://extensions`と入力して拡張機能管理画面を開いてください。画面右上のデベロッパーモードを有効にしたあと、「パッケージ化されていない拡張機能を読み込む」から`dist-extension`フォルダを選ぶと導入が完了します。ツールバーの拡張機能アイコンを押すと、専用タブでエディタ画面が立ち上がります。

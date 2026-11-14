@@ -11,6 +11,7 @@ import {
   Heading2,
   Heading3,
   Italic,
+  Languages,
   Link,
   List,
   ListOrdered,
@@ -19,6 +20,7 @@ import {
   Strikethrough,
   Table,
 } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 export interface ToolbarProps {
   fileName: string;
@@ -33,13 +35,18 @@ export interface ToolbarProps {
   onOpenNewMermaid: () => void;
 }
 
-function buildMarkdownTable(rows: number, cols: number): string {
+function buildMarkdownTable(
+  rows: number,
+  cols: number,
+  getColHeader: (index: number) => string,
+  bodyCell: string
+): string {
   const safeRows = Math.max(1, Math.min(20, rows));
   const safeCols = Math.max(1, Math.min(12, cols));
 
-  const headers = Array.from({ length: safeCols }, (_, index) => `列${index + 1}`);
+  const headers = Array.from({ length: safeCols }, (_, index) => getColHeader(index + 1));
   const dividers = Array.from({ length: safeCols }, () => '---');
-  const bodyRow = Array.from({ length: safeCols }, () => '内容');
+  const bodyRow = Array.from({ length: safeCols }, () => bodyCell);
 
   const lines = [
     `| ${headers.join(' | ')} |`,
@@ -62,33 +69,41 @@ export default function Toolbar({
   onInsertText,
   onOpenNewMermaid,
 }: ToolbarProps) {
+  const { toggleLang, t } = useI18n();
   const [tablePopoverOpen, setTablePopoverOpen] = useState(false);
   const [tableRows, setTableRows] = useState(2);
   const [tableCols, setTableCols] = useState(2);
 
   const handleInsertTable = (): void => {
-    onInsertText(buildMarkdownTable(tableRows, tableCols));
+    onInsertText(
+      buildMarkdownTable(
+        tableRows,
+        tableCols,
+        t.toolbar.tableColHeader,
+        t.toolbar.tableBodyCell
+      )
+    );
     setTablePopoverOpen(false);
   };
 
   return (
     <header className="toolbar">
       <div className="toolbar-group">
-        <button type="button" className="toolbar-btn" onClick={onNewFile} title="新規作成">
+        <button type="button" className="toolbar-btn" onClick={onNewFile} title={t.toolbar.newTitle}>
           <FilePlus size={16} />
-          <span>新規</span>
+          <span>{t.toolbar.newLabel}</span>
         </button>
-        <button type="button" className="toolbar-btn" onClick={onOpenFile} title="ファイルを開く (Ctrl+O)">
+        <button type="button" className="toolbar-btn" onClick={onOpenFile} title={t.toolbar.openTitle}>
           <FolderOpen size={16} />
-          <span>開く</span>
+          <span>{t.toolbar.openLabel}</span>
         </button>
-        <button type="button" className="toolbar-btn" onClick={onSaveFile} title="上書き保存 (Ctrl+S)">
+        <button type="button" className="toolbar-btn" onClick={onSaveFile} title={t.toolbar.saveTitle}>
           <Save size={16} />
-          <span>保存</span>
+          <span>{t.toolbar.saveLabel}</span>
         </button>
-        <button type="button" className="toolbar-btn" onClick={onSaveFileAs} title="名前を付けて保存 (Ctrl+Shift+S)">
+        <button type="button" className="toolbar-btn" onClick={onSaveFileAs} title={t.toolbar.saveAsTitle}>
           <FileDown size={16} />
-          <span>別名保存</span>
+          <span>{t.toolbar.saveAsLabel}</span>
         </button>
       </div>
 
@@ -99,7 +114,7 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('# ')}
-          title="見出し1 (H1)"
+          title={t.toolbar.h1Title}
         >
           <Heading1 size={16} />
         </button>
@@ -107,7 +122,7 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('## ')}
-          title="見出し2 (H2)"
+          title={t.toolbar.h2Title}
         >
           <Heading2 size={16} />
         </button>
@@ -115,7 +130,7 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('### ')}
-          title="見出し3 (H3)"
+          title={t.toolbar.h3Title}
         >
           <Heading3 size={16} />
         </button>
@@ -127,32 +142,32 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('**', '**', '太字テキスト')}
-          title="太字"
+          onClick={() => onWrapSelection('**', '**', t.toolbar.boldPlaceholder)}
+          title={t.toolbar.boldTitle}
         >
           <Bold size={16} />
         </button>
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('*', '*', '斜体テキスト')}
-          title="斜体"
+          onClick={() => onWrapSelection('*', '*', t.toolbar.italicPlaceholder)}
+          title={t.toolbar.italicTitle}
         >
           <Italic size={16} />
         </button>
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('~~', '~~', '打ち消しテキスト')}
-          title="打ち消し線"
+          onClick={() => onWrapSelection('~~', '~~', t.toolbar.strikePlaceholder)}
+          title={t.toolbar.strikeTitle}
         >
           <Strikethrough size={16} />
         </button>
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('[', '](https://example.com)', 'リンク名')}
-          title="リンク挿入"
+          onClick={() => onWrapSelection('[', '](https://example.com)', t.toolbar.linkPlaceholder)}
+          title={t.toolbar.linkTitle}
         >
           <Link size={16} />
         </button>
@@ -165,7 +180,7 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('- ')}
-          title="箇条書きリスト"
+          title={t.toolbar.bulletListTitle}
         >
           <List size={16} />
         </button>
@@ -173,7 +188,7 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('1. ')}
-          title="番号付きリスト"
+          title={t.toolbar.orderedListTitle}
         >
           <ListOrdered size={16} />
         </button>
@@ -181,7 +196,7 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('- [ ] ')}
-          title="タスクリスト"
+          title={t.toolbar.taskListTitle}
         >
           <CheckSquare size={16} />
         </button>
@@ -189,15 +204,15 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-icon"
           onClick={() => onInsertLinePrefix('> ')}
-          title="引用"
+          title={t.toolbar.quoteTitle}
         >
           <Quote size={16} />
         </button>
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertText('\n```\nここにコードを入力\n```\n')}
-          title="コードブロック"
+          onClick={() => onInsertText(t.toolbar.codeBlockSnippet)}
+          title={t.toolbar.codeBlockTitle}
         >
           <Code size={16} />
         </button>
@@ -210,17 +225,17 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn"
           onClick={() => setTablePopoverOpen((prev) => !prev)}
-          title="表をGUIで作成して挿入"
+          title={t.toolbar.tableButtonTitle}
         >
           <Table size={16} />
-          <span>表を挿入</span>
+          <span>{t.toolbar.tableButtonLabel}</span>
         </button>
 
         {tablePopoverOpen && (
           <div className="table-popover">
-            <div className="table-popover-title">表の挿入設定</div>
+            <div className="table-popover-title">{t.toolbar.tablePopoverTitle}</div>
             <label className="table-popover-field">
-              <span>行数</span>
+              <span>{t.toolbar.tableRows}</span>
               <input
                 type="number"
                 min={1}
@@ -230,7 +245,7 @@ export default function Toolbar({
               />
             </label>
             <label className="table-popover-field">
-              <span>列数</span>
+              <span>{t.toolbar.tableCols}</span>
               <input
                 type="number"
                 min={1}
@@ -241,10 +256,10 @@ export default function Toolbar({
             </label>
             <div className="table-popover-actions">
               <button type="button" className="btn-secondary" onClick={() => setTablePopoverOpen(false)}>
-                閉じる
+                {t.toolbar.tableClose}
               </button>
               <button type="button" className="btn-primary" onClick={handleInsertTable}>
-                挿入
+                {t.toolbar.tableInsert}
               </button>
             </div>
           </div>
@@ -254,16 +269,26 @@ export default function Toolbar({
           type="button"
           className="toolbar-btn toolbar-btn-accent"
           onClick={onOpenNewMermaid}
-          title="Mermaid図をGUIで新規作成"
+          title={t.toolbar.mermaidButtonTitle}
         >
           <GitBranch size={16} />
-          <span>Mermaid図をGUI作成</span>
+          <span>{t.toolbar.mermaidButtonLabel}</span>
         </button>
       </div>
 
       <div className="toolbar-file-status" title={fileName}>
         <span className="file-name-text">{fileName}</span>
-        {isDirty && <span className="unsaved-badge">未保存</span>}
+        {isDirty && <span className="unsaved-badge">{t.toolbar.unsavedBadge}</span>}
+        <button
+          type="button"
+          className="toolbar-lang-btn"
+          onClick={toggleLang}
+          title={t.toolbar.langButtonTitle}
+          aria-label={t.toolbar.langButtonTitle}
+        >
+          <Languages size={14} />
+          <span>{t.toolbar.langButtonLabel}</span>
+        </button>
       </div>
     </header>
   );

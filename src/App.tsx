@@ -2,31 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Toolbar from './components/Toolbar';
 import MarkdownEditor, { type MarkdownEditorHandle } from './components/MarkdownEditor';
 import MermaidModal from './components/MermaidModal';
+import {
+  INITIAL_MARKDOWN_EN,
+  INITIAL_MARKDOWN_JA,
+  getInitialMarkdownByLang,
+  useI18n,
+  type Language,
+} from './i18n';
+import {
+  openMarkdownFile,
+  resetBrowserFileHandle,
+  saveMarkdownFile,
+  saveMarkdownFileAs,
+} from './utils/fileAdapter';
 
-const INITIAL_MARKDOWN = `# Mermaid Markdown Editor
-
-上部のツールバーから見出しや表、Mermaid図をGUI操作で挿入できます。
-
-## 基本的な使い方
-
-1. 左側の編集エリアに文章を書くか、ツールバーのボタンを押します。
-2. 「Mermaid図をGUI作成」ボタンを押すと、図形と接続先をGUIで組み立てられます。
-3. 右側のプレビュー上にある「この図をGUIで編集」ボタンから、既存の図を何度でも編集し直せます。
-
-## サンプルフローチャート
-
-\`\`\`mermaid
-flowchart TD
-  node_1(["開始"])
-  style node_1 fill:#eff6ff,stroke:#475569,color:#0f172a
-  node_2{"条件を確認"}
-  node_3["完了処理"]
-  style node_3 fill:#f0fdf4,stroke:#475569,color:#0f172a
-  node_1 -->|"入力あり"| node_2
-  node_2 -->|"OK"| node_3
-%% @gui-state: {"direction":"TD","nodes":[{"id":"node_1","label":"開始","shape":"stadium","color":"#eff6ff","position":{"x":180,"y":40}},{"id":"node_2","label":"条件を確認","shape":"diamond","color":"#ffffff","position":{"x":185,"y":155}},{"id":"node_3","label":"完了処理","shape":"rect","color":"#f0fdf4","position":{"x":180,"y":310}}],"edges":[{"id":"edge_1","source":"node_1","target":"node_2","label":"入力あり","lineType":"arrow"},{"id":"edge_2","source":"node_2","target":"node_3","label":"OK","lineType":"arrow"}]}
-\`\`\`
-`;
+const DRAFT_STORAGE_KEY = 'mermaid-flow-editor:draft';
 
 function replaceMermaidBlock(
   markdown: string,
@@ -59,17 +49,32 @@ function replaceMermaidBlock(
   return markdown;
 }
 
-function getDisplayFileName(filePath: string | null): string {
+function getDisplayFileName(filePath: string | null, untitledFileName: string): string {
   if (!filePath) {
-    return '無題.md';
+    return untitledFileName;
   }
   const parts = filePath.split(/[\\/]/);
-  return parts[parts.length - 1] || '無題.md';
+  return parts[parts.length - 1] || untitledFileName;
+}
+
+function loadInitialMarkdown(lang: Language): string {
+  if (typeof window !== 'undefined' && !window.electronAPI) {
+    try {
+      const savedDraft = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (savedDraft && savedDraft.trim().length > 0) {
+        return savedDraft;
+      }
+    } catch {
+      // ストレージ参照不可時は初期テキストを使用する
+    }
+  }
+  return getInitialMarkdownByLang(lang);
 }
 
 export default function App() {
+  const { lang, t } = useI18n();
   const editorRef = useRef<MarkdownEditorHandle>(null);
-  const [markdownText, setMarkdownText] = useState(INITIAL_MARKDOWN);
+  const [markdownText, setMarkdownText] = useState<string>(() => loadInitialMarkdown(lang));
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -78,11 +83,37 @@ export default function App() {
   const [editingBlockIndex, setEditingBlockIndex] = useState<number | null>(null);
   const [editingInitialCode, setEditingInitialCode] = useState('');
 
-  const fileName = useMemo(() => getDisplayFileName(currentFilePath), [currentFilePath]);
+  const fileName = useMemo(
+    () => getDisplayFileName(currentFilePath, t.app.untitledFileName),
+    [currentFilePath, t.app.untitledFileName]
+  );
 
   useEffect(() => {
     document.title = `${isDirty ? '* ' : ''}${fileName} - Mermaid Markdown Editor`;
   }, [fileName, isDirty]);
+
+  useEffect(() => {
+    if (
+      !isDirty &&
+      (markdownText === INITIAL_MARKDOWN_JA || markdownText === INITIAL_MARKDOWN_EN)
+    ) {
+      const targetSample = getInitialMarkdownByLang(lang);
+      if (markdownText !== targetSample) {
+        setMarkdownText(targetSample);
+      }
+    }
+  }, [lang, isDirty, markdownText]);
+
+  useEffect(() => {
+    if (window.electronAPI) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(DRAFT_STORAGE_KEY, markdownText);
+    } catch {
+      // ストレージ容量超過等のエラーは無視する
+    }
+  }, [markdownText]);
 
   const handleChangeText = useCallback((next: string) => {
     setMarkdownText(next);
@@ -94,81 +125,74 @@ export default function App() {
       if (!isDirty) {
         return true;
       }
-      return window.confirm(`未保存の変更があります。内容を破棄して${actionLabel}を続けますか？`);
+      return window.confirm(t.app.confirmDiscard(actionLabel));
     },
-    [isDirty]
+    [isDirty, t]
   );
 
   const handleNewFile = useCallback(() => {
-    if (!confirmDiscardIfDirty('新規作成')) {
+    if (!confirmDiscardIfDirty(t.app.actionNew)) {
       return;
     }
+    resetBrowserFileHandle();
     setMarkdownText('');
     setCurrentFilePath(null);
     setIsDirty(false);
-    setStatusMessage('新しいドキュメントを作成しました。');
-  }, [confirmDiscardIfDirty]);
+    setStatusMessage(t.app.statusNewCreated);
+  }, [confirmDiscardIfDirty, t]);
 
   const handleOpenFile = useCallback(async () => {
-    if (!window.electronAPI) {
-      setStatusMessage('デスクトップアプリの環境でのみファイルを開けます。');
-      return;
-    }
-    if (!confirmDiscardIfDirty('ファイルを開く操作')) {
+    if (!confirmDiscardIfDirty(t.app.actionOpen)) {
       return;
     }
 
     try {
-      const result = await window.electronAPI.openFile();
+      const result = await openMarkdownFile();
       if (!result.canceled && result.filePath && typeof result.content === 'string') {
         setMarkdownText(result.content);
         setCurrentFilePath(result.filePath);
         setIsDirty(false);
-        setStatusMessage(`ファイルを開きました: ${getDisplayFileName(result.filePath)}`);
+        setStatusMessage(
+          t.app.statusOpened(getDisplayFileName(result.filePath, t.app.untitledFileName))
+        );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ファイルの読み込みに失敗しました。';
+      const msg = err instanceof Error ? err.message : t.app.statusOpenError;
       setStatusMessage(msg);
     }
-  }, [confirmDiscardIfDirty]);
+  }, [confirmDiscardIfDirty, t]);
 
   const handleSaveFile = useCallback(async () => {
-    if (!window.electronAPI) {
-      setStatusMessage('デスクトップアプリの環境でのみファイルを保存できます。');
-      return;
-    }
-
     try {
-      const result = await window.electronAPI.saveFile(currentFilePath, markdownText);
+      const result = await saveMarkdownFile(currentFilePath, markdownText);
       if (!result.canceled && result.filePath) {
         setCurrentFilePath(result.filePath);
         setIsDirty(false);
-        setStatusMessage(`保存しました: ${getDisplayFileName(result.filePath)}`);
+        setStatusMessage(
+          t.app.statusSaved(getDisplayFileName(result.filePath, t.app.untitledFileName))
+        );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ファイルの保存に失敗しました。';
+      const msg = err instanceof Error ? err.message : t.app.statusSaveError;
       setStatusMessage(msg);
     }
-  }, [currentFilePath, markdownText]);
+  }, [currentFilePath, markdownText, t]);
 
   const handleSaveFileAs = useCallback(async () => {
-    if (!window.electronAPI) {
-      setStatusMessage('デスクトップアプリの環境でのみファイルを保存できます。');
-      return;
-    }
-
     try {
-      const result = await window.electronAPI.saveFileAs(markdownText);
+      const result = await saveMarkdownFileAs(markdownText, currentFilePath);
       if (!result.canceled && result.filePath) {
         setCurrentFilePath(result.filePath);
         setIsDirty(false);
-        setStatusMessage(`名前を付けて保存しました: ${getDisplayFileName(result.filePath)}`);
+        setStatusMessage(
+          t.app.statusSaveAs(getDisplayFileName(result.filePath, t.app.untitledFileName))
+        );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ファイルの保存に失敗しました。';
+      const msg = err instanceof Error ? err.message : t.app.statusSaveError;
       setStatusMessage(msg);
     }
-  }, [markdownText]);
+  }, [currentFilePath, markdownText, t]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -266,7 +290,7 @@ export default function App() {
             className="status-banner-close"
             onClick={() => setStatusMessage(null)}
           >
-            閉じる
+            {t.app.closeBanner}
           </button>
         </div>
       )}

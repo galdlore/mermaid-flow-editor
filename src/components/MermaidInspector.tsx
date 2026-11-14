@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useI18n } from '../i18n';
+import GuardedInput from './GuardedInput';
+import {
+  FORBIDDEN_CLASS_NAME_CHARS_REGEX,
+  FORBIDDEN_LABEL_CHARS_REGEX,
+  FORBIDDEN_URL_CHARS_REGEX,
+} from '../utils/inputSafeguard';
 import type {
+  EdgeLabelStyle,
   EdgeLineType,
+  MermaidClassDefData,
   MermaidDiagramData,
   MermaidDirection,
   MermaidEdgeData,
   MermaidNodeData,
+  MermaidSubgraphData,
   NodeShape,
 } from '../types/editor';
 
@@ -18,36 +28,96 @@ export interface MermaidInspectorProps {
   onSelectEdge: (edgeId: string | null) => void;
 }
 
-const DIRECTION_OPTIONS: Array<{ value: MermaidDirection; label: string }> = [
-  { value: 'TD', label: '上から下 (TD)' },
-  { value: 'LR', label: '左から右 (LR)' },
-  { value: 'BT', label: '下から上 (BT)' },
-  { value: 'RL', label: '右から左 (RL)' },
+const DIRECTION_VALUES: ReadonlyArray<MermaidDirection> = ['TD', 'LR', 'BT', 'RL'];
+
+const SHAPE_VALUES: ReadonlyArray<NodeShape> = [
+  'rect',
+  'round',
+  'stadium',
+  'subroutine',
+  'cylinder',
+  'circle',
+  'asymmetric',
+  'diamond',
+  'hexagon',
+  'parallelogram',
+  'parallelogram_alt',
+  'trapezoid',
+  'trapezoid_alt',
+  'double_circle',
+  'doc',
+  'cyl_modern',
 ];
 
-const SHAPE_OPTIONS: Array<{ value: NodeShape; label: string }> = [
-  { value: 'rect', label: '四角形' },
-  { value: 'round', label: '角丸' },
-  { value: 'diamond', label: 'ひし形' },
-  { value: 'circle', label: '円形' },
-  { value: 'stadium', label: 'カプセル' },
+function ShapeMiniIcon({ shape }: { shape: NodeShape }) {
+  return (
+    <svg className="shape-mini-icon" viewBox="0 0 24 16" aria-hidden="true">
+      {shape === 'rect' && <rect x="2" y="2" width="20" height="12" rx="1" />}
+      {shape === 'round' && <rect x="2" y="2" width="20" height="12" rx="4" />}
+      {shape === 'stadium' && <rect x="2" y="2" width="20" height="12" rx="6" />}
+      {shape === 'subroutine' && (
+        <>
+          <rect x="2" y="2" width="20" height="12" rx="1" />
+          <line x1="5.5" y1="2" x2="5.5" y2="14" />
+          <line x1="18.5" y1="2" x2="18.5" y2="14" />
+        </>
+      )}
+      {(shape === 'cylinder' || shape === 'cyl_modern') && (
+        <>
+          <path d="M 4,4.5 L 4,12.5 A 8,2.2 0 0 0 20,12.5 L 20,4.5" />
+          <ellipse cx="12" cy="4.5" rx="8" ry="2.2" />
+        </>
+      )}
+      {shape === 'circle' && <circle cx="12" cy="8" r="6.5" />}
+      {shape === 'double_circle' && (
+        <>
+          <circle cx="12" cy="8" r="6.5" />
+          <circle cx="12" cy="8" r="4.2" />
+        </>
+      )}
+      {shape === 'asymmetric' && <polygon points="2,2 22,2 22,14 2,14 6,8" />}
+      {shape === 'diamond' && <polygon points="12,1.5 22,8 12,14.5 2,8" />}
+      {shape === 'hexagon' && <polygon points="6,2 18,2 22,8 18,14 6,14 2,8" />}
+      {shape === 'parallelogram' && <polygon points="6,2 22,2 18,14 2,14" />}
+      {shape === 'parallelogram_alt' && <polygon points="2,2 18,2 22,14 6,14" />}
+      {shape === 'trapezoid' && <polygon points="6,2 18,2 22,14 2,14" />}
+      {shape === 'trapezoid_alt' && <polygon points="2,2 22,2 18,14 6,14" />}
+      {shape === 'doc' && <path d="M 3,2 L 21,2 L 21,12 Q 16.5,9.5 12,12 T 3,12 Z" />}
+    </svg>
+  );
+}
+
+const LINE_TYPE_VALUES: ReadonlyArray<EdgeLineType> = [
+  'arrow',
+  'line',
+  'dotted',
+  'thick',
+  'circle',
+  'cross',
+  'bidirectional',
+  'invisible',
 ];
 
-const LINE_TYPE_OPTIONS: Array<{ value: EdgeLineType; label: string }> = [
-  { value: 'arrow', label: '実線矢印 (-->)' },
-  { value: 'dotted', label: '点線矢印 (-.->)' },
-  { value: 'thick', label: '太線矢印 (==>)' },
-  { value: 'line', label: '線のみ (---)' },
-];
+const EDGE_LENGTH_VALUES = [0, 1, 2, 3] as const;
 
-const COLOR_PALETTE = [
-  { value: '#ffffff', label: '白' },
-  { value: '#eff6ff', label: '青' },
-  { value: '#f0fdf4', label: '緑' },
-  { value: '#fefce8', label: '黄' },
-  { value: '#fef2f2', label: '赤' },
-  { value: '#faf5ff', label: '紫' },
-];
+const COLOR_PALETTE_ITEMS = [
+  { value: '#ffffff', key: 'white' },
+  { value: '#eff6ff', key: 'blue' },
+  { value: '#f0fdf4', key: 'green' },
+  { value: '#fefce8', key: 'yellow' },
+  { value: '#fef2f2', key: 'red' },
+  { value: '#faf5ff', key: 'purple' },
+] as const;
+
+const STROKE_COLOR_PALETTE_ITEMS = [
+  { value: '', key: 'default' },
+  { value: '#475569', key: 'slate' },
+  { value: '#2563eb', key: 'blue' },
+  { value: '#16a34a', key: 'green' },
+  { value: '#d97706', key: 'amber' },
+  { value: '#dc2626', key: 'red' },
+  { value: '#9333ea', key: 'purple' },
+] as const;
 
 function createUniqueNodeId(nodes: MermaidNodeData[]): string {
   let index = nodes.length + 1;
@@ -65,6 +135,22 @@ function createUniqueEdgeId(edges: MermaidEdgeData[]): string {
   return `edge_${index}`;
 }
 
+function createUniqueSubgraphId(subgraphs: MermaidSubgraphData[]): string {
+  let index = subgraphs.length + 1;
+  while (subgraphs.some((sg) => sg.id === `sg_${index}`)) {
+    index += 1;
+  }
+  return `sg_${index}`;
+}
+
+function sanitizeClassDefName(raw: string, fallbackIndex: number): string {
+  const cleaned = raw.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  if (!cleaned) {
+    return `style_${fallbackIndex}`;
+  }
+  return /^[a-zA-Z_]/.test(cleaned) ? cleaned : `c_${cleaned}`;
+}
+
 export default function MermaidInspector({
   diagramData,
   selectedNodeId,
@@ -73,10 +159,19 @@ export default function MermaidInspector({
   onSelectNode,
   onSelectEdge,
 }: MermaidInspectorProps) {
+  const { t } = useI18n();
   const [newEdgeSource, setNewEdgeSource] = useState<string>('');
   const [newEdgeTarget, setNewEdgeTarget] = useState<string>('');
   const [newEdgeLineType, setNewEdgeLineType] = useState<EdgeLineType>('arrow');
+  const [newEdgeLength, setNewEdgeLength] = useState<number>(0);
+  const [newEdgeLabelStyle, setNewEdgeLabelStyle] = useState<EdgeLabelStyle>('pipe');
+  const [newEdgeStrokeColor, setNewEdgeStrokeColor] = useState<string>('');
   const [newEdgeLabel, setNewEdgeLabel] = useState<string>('');
+  const [newSubgraphTitle, setNewSubgraphTitle] = useState<string>('');
+  const [newSubgraphDirection, setNewSubgraphDirection] = useState<MermaidDirection | ''>('');
+  const [newClassName, setNewClassName] = useState<string>('');
+  const [newClassFill, setNewClassFill] = useState<string>('#eff6ff');
+  const [newClassStroke, setNewClassStroke] = useState<string>('#2563eb');
 
   useEffect(() => {
     const nodes = diagramData.nodes;
@@ -107,7 +202,7 @@ export default function MermaidInspector({
     const count = diagramData.nodes.length;
     const newNode: MermaidNodeData = {
       id: nextId,
-      label: `要素 ${count + 1}`,
+      label: t.inspector.defaultNewNodeLabel(count + 1),
       shape: 'rect',
       color: '#ffffff',
       position: {
@@ -150,6 +245,20 @@ export default function MermaidInspector({
     onSelectNode(null);
   };
 
+  const getLengthOptionLabel = (len: number): string => {
+    switch (len) {
+      case 1:
+        return t.inspector.edgeLengths.long1;
+      case 2:
+        return t.inspector.edgeLengths.long2;
+      case 3:
+        return t.inspector.edgeLengths.long3;
+      case 0:
+      default:
+        return t.inspector.edgeLengths.standard;
+    }
+  };
+
   const handleAddEdge = (): void => {
     if (!newEdgeSource || !newEdgeTarget) {
       return;
@@ -159,6 +268,9 @@ export default function MermaidInspector({
       source: newEdgeSource,
       target: newEdgeTarget,
       lineType: newEdgeLineType,
+      ...(newEdgeLength > 0 ? { extraLength: newEdgeLength } : {}),
+      ...(newEdgeLabelStyle !== 'pipe' ? { labelStyle: newEdgeLabelStyle } : {}),
+      ...(newEdgeStrokeColor ? { strokeColor: newEdgeStrokeColor } : {}),
       label: newEdgeLabel.trim() || undefined,
     };
     onChange({
@@ -185,21 +297,103 @@ export default function MermaidInspector({
     }
   };
 
+  const subgraphs = diagramData.subgraphs ?? [];
+  const classDefs = diagramData.classDefs ?? [];
+
+  const handleAddSubgraph = (): void => {
+    const nextId = createUniqueSubgraphId(subgraphs);
+    const nextTitle =
+      newSubgraphTitle.trim() || t.inspector.defaultSubgraphTitle(subgraphs.length + 1);
+    const nextSubgraph: MermaidSubgraphData = {
+      id: nextId,
+      title: nextTitle,
+      ...(newSubgraphDirection ? { direction: newSubgraphDirection } : {}),
+    };
+    onChange({
+      ...diagramData,
+      subgraphs: [...subgraphs, nextSubgraph],
+    });
+    setNewSubgraphTitle('');
+    setNewSubgraphDirection('');
+  };
+
+  const handleUpdateSubgraph = (
+    subgraphId: string,
+    patch: Partial<MermaidSubgraphData>
+  ): void => {
+    const nextSubgraphs = subgraphs.map((sg) =>
+      sg.id === subgraphId ? { ...sg, ...patch } : sg
+    );
+    onChange({ ...diagramData, subgraphs: nextSubgraphs });
+  };
+
+  const handleDeleteSubgraph = (subgraphId: string): void => {
+    const nextSubgraphs = subgraphs.filter((sg) => sg.id !== subgraphId);
+    const nextNodes = diagramData.nodes.map((node) =>
+      node.subgraphId === subgraphId ? { ...node, subgraphId: undefined } : node
+    );
+    onChange({
+      ...diagramData,
+      nodes: nextNodes,
+      subgraphs: nextSubgraphs.length > 0 ? nextSubgraphs : undefined,
+    });
+  };
+
+  const handleAddClassDef = (): void => {
+    const className = sanitizeClassDefName(newClassName, classDefs.length + 1);
+    const nextClassDef: MermaidClassDefData = {
+      name: className,
+      fill: newClassFill,
+      stroke: newClassStroke || '#475569',
+      color: '#0f172a',
+    };
+    const exists = classDefs.some((cls) => cls.name === className);
+    const nextClassDefs = exists
+      ? classDefs.map((cls) => (cls.name === className ? nextClassDef : cls))
+      : [...classDefs, nextClassDef];
+    onChange({
+      ...diagramData,
+      classDefs: nextClassDefs,
+    });
+    setNewClassName('');
+  };
+
+  const handleDeleteClassDef = (className: string): void => {
+    const nextClassDefs = classDefs.filter((cls) => cls.name !== className);
+    const nextNodes = diagramData.nodes.map((node) =>
+      node.className === className ? { ...node, className: undefined } : node
+    );
+    onChange({
+      ...diagramData,
+      nodes: nextNodes,
+      classDefs: nextClassDefs.length > 0 ? nextClassDefs : undefined,
+    });
+  };
+
+  const handleCommentsChange = (rawText: string): void => {
+    const lines = rawText.split(/\r?\n/);
+    const hasContent = lines.some((line) => line.trim().length > 0);
+    onChange({
+      ...diagramData,
+      comments: hasContent ? lines : undefined,
+    });
+  };
+
   return (
     <aside className="inspector-panel">
       <section className="inspector-section">
-        <h3 className="inspector-heading">図の向き設定</h3>
+        <h3 className="inspector-heading">{t.inspector.directionHeading}</h3>
         <div className="direction-grid">
-          {DIRECTION_OPTIONS.map((option) => (
+          {DIRECTION_VALUES.map((directionValue) => (
             <button
-              key={option.value}
+              key={directionValue}
               type="button"
               className={`inspector-choice-btn ${
-                diagramData.direction === option.value ? 'is-active' : ''
+                diagramData.direction === directionValue ? 'is-active' : ''
               }`}
-              onClick={() => handleDirectionChange(option.value)}
+              onClick={() => handleDirectionChange(directionValue)}
             >
-              {option.label}
+              {t.inspector.directions[directionValue]}
             </button>
           ))}
         </div>
@@ -207,15 +401,15 @@ export default function MermaidInspector({
 
       <section className="inspector-section">
         <div className="inspector-section-header">
-          <h3 className="inspector-heading">要素の追加と編集</h3>
+          <h3 className="inspector-heading">{t.inspector.nodesHeading}</h3>
           <button type="button" className="btn-primary btn-sm" onClick={handleAddNode}>
             <Plus size={14} />
-            <span>要素を追加</span>
+            <span>{t.inspector.addNodeBtn}</span>
           </button>
         </div>
 
         <label className="inspector-field">
-          <span>編集対象の要素</span>
+          <span>{t.inspector.targetNodeLabel}</span>
           <select
             value={selectedNodeId ?? ''}
             onChange={(event) => {
@@ -224,7 +418,7 @@ export default function MermaidInspector({
               onSelectNode(id);
             }}
           >
-            <option value="">要素を選択してください</option>
+            <option value="">{t.inspector.selectNodePlaceholder}</option>
             {diagramData.nodes.map((node) => (
               <option key={node.id} value={node.id}>
                 {node.label} ({node.id})
@@ -236,41 +430,50 @@ export default function MermaidInspector({
         {selectedNode ? (
           <div className="node-edit-box">
             <label className="inspector-field">
-              <span>ラベル名</span>
-              <input
-                type="text"
+              <span>{t.inspector.nodeLabelField}</span>
+              <GuardedInput
                 value={selectedNode.label}
-                onChange={(event) => handleUpdateSelectedNode({ label: event.target.value })}
-                placeholder="要素のテキスト"
+                onChangeValue={(nextVal) => handleUpdateSelectedNode({ label: nextVal })}
+                forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                formatError={t.inspector.safeguard.syntaxErrorChars}
+                placeholder={t.inspector.nodeLabelPlaceholder}
               />
             </label>
 
             <div className="inspector-field">
-              <span>図形の形状</span>
-              <div className="shape-btn-group">
-                {SHAPE_OPTIONS.map((shape) => (
-                  <button
-                    key={shape.value}
-                    type="button"
-                    className={`inspector-choice-btn ${
-                      selectedNode.shape === shape.value ? 'is-active' : ''
-                    }`}
-                    onClick={() => handleUpdateSelectedNode({ shape: shape.value })}
-                  >
-                    {shape.label}
-                  </button>
-                ))}
+              <span>{t.inspector.nodeShapeField}</span>
+              <div className="shape-grid-group">
+                {SHAPE_VALUES.map((shapeValue) => {
+                  const shapeInfo = t.inspector.shapes[shapeValue];
+                  return (
+                    <button
+                      key={shapeValue}
+                      type="button"
+                      title={`${shapeInfo.syntax} (${shapeInfo.meaning})`}
+                      className={`shape-choice-btn ${
+                        selectedNode.shape === shapeValue ? 'is-active' : ''
+                      }`}
+                      onClick={() => handleUpdateSelectedNode({ shape: shapeValue })}
+                    >
+                      <ShapeMiniIcon shape={shapeValue} />
+                      <span className="shape-choice-text">
+                        <span className="shape-choice-name">{shapeInfo.label}</span>
+                        <span className="shape-choice-meta">{shapeInfo.meaning}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div className="inspector-field">
-              <span>背景色</span>
+              <span>{t.inspector.nodeColorField}</span>
               <div className="color-palette-row">
-                {COLOR_PALETTE.map((color) => (
+                {COLOR_PALETTE_ITEMS.map((color) => (
                   <button
                     key={color.value}
                     type="button"
-                    title={color.label}
+                    title={t.inspector.colors[color.key]}
                     className={`color-swatch-btn ${
                       (selectedNode.color || '#ffffff') === color.value ? 'is-active' : ''
                     }`}
@@ -281,29 +484,124 @@ export default function MermaidInspector({
               </div>
             </div>
 
+            <div className="inspector-field">
+              <span>{t.inspector.nodeStrokeColorField}</span>
+              <div className="color-palette-row">
+                {STROKE_COLOR_PALETTE_ITEMS.map((stroke) => (
+                  <button
+                    key={stroke.key}
+                    type="button"
+                    title={t.inspector.strokeColors[stroke.key]}
+                    className={`color-swatch-btn stroke-swatch ${
+                      (selectedNode.strokeColor || '') === stroke.value ? 'is-active' : ''
+                    }`}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderColor: stroke.value || '#cbd5e1',
+                      borderWidth: stroke.value ? '3px' : '1px',
+                    }}
+                    onClick={() =>
+                      handleUpdateSelectedNode({ strokeColor: stroke.value || undefined })
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="edge-add-grid">
+              <label className="inspector-field">
+                <span>{t.inspector.nodeSubgraphField}</span>
+                <select
+                  value={selectedNode.subgraphId ?? ''}
+                  onChange={(event) =>
+                    handleUpdateSelectedNode({
+                      subgraphId: event.target.value || undefined,
+                    })
+                  }
+                >
+                  <option value="">{t.inspector.noSubgraphOption}</option>
+                  {subgraphs.map((sg) => (
+                    <option key={sg.id} value={sg.id}>
+                      {sg.title || sg.id} ({sg.id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="inspector-field">
+                <span>{t.inspector.nodeClassField}</span>
+                <select
+                  value={selectedNode.className ?? ''}
+                  onChange={(event) =>
+                    handleUpdateSelectedNode({
+                      className: event.target.value || undefined,
+                    })
+                  }
+                >
+                  <option value="">{t.inspector.noClassOption}</option>
+                  {classDefs.map((cls) => (
+                    <option key={cls.name} value={cls.name}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="edge-add-grid">
+              <label className="inspector-field">
+                <span>{t.inspector.nodeLinkUrlField}</span>
+                <GuardedInput
+                  type="url"
+                  value={selectedNode.linkUrl ?? ''}
+                  onChangeValue={(nextVal) =>
+                    handleUpdateSelectedNode({
+                      linkUrl: nextVal || undefined,
+                    })
+                  }
+                  forbiddenRegex={FORBIDDEN_URL_CHARS_REGEX}
+                  formatError={t.inspector.safeguard.urlErrorChars}
+                  placeholder={t.inspector.nodeLinkUrlPlaceholder}
+                />
+              </label>
+
+              <label className="inspector-field">
+                <span>{t.inspector.nodeLinkTooltipField}</span>
+                <GuardedInput
+                  value={selectedNode.linkTooltip ?? ''}
+                  onChangeValue={(nextVal) =>
+                    handleUpdateSelectedNode({
+                      linkTooltip: nextVal || undefined,
+                    })
+                  }
+                  forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                  formatError={t.inspector.safeguard.syntaxErrorChars}
+                  placeholder={t.inspector.nodeLinkTooltipPlaceholder}
+                />
+              </label>
+            </div>
+
             <button
               type="button"
               className="btn-danger btn-full"
               onClick={handleDeleteSelectedNode}
             >
               <Trash2 size={14} />
-              <span>この要素を削除</span>
+              <span>{t.inspector.deleteNodeBtn}</span>
             </button>
           </div>
         ) : (
-          <p className="inspector-hint">
-            キャンバス上の図形をクリックするか、上のプルダウンから編集する要素を選んでください。
-          </p>
+          <p className="inspector-hint">{t.inspector.selectNodeHint}</p>
         )}
       </section>
 
       <section className="inspector-section">
-        <h3 className="inspector-heading">接続先のGUI設定</h3>
+        <h3 className="inspector-heading">{t.inspector.edgesHeading}</h3>
 
         <div className="edge-add-card">
           <div className="edge-add-grid">
             <label className="inspector-field">
-              <span>接続元</span>
+              <span>{t.inspector.sourceLabel}</span>
               <select
                 value={newEdgeSource}
                 onChange={(event) => setNewEdgeSource(event.target.value)}
@@ -318,7 +616,7 @@ export default function MermaidInspector({
             </label>
 
             <label className="inspector-field">
-              <span>接続先</span>
+              <span>{t.inspector.targetLabel}</span>
               <select
                 value={newEdgeTarget}
                 onChange={(event) => setNewEdgeTarget(event.target.value)}
@@ -335,29 +633,72 @@ export default function MermaidInspector({
 
           <div className="edge-add-grid">
             <label className="inspector-field">
-              <span>線の種類</span>
+              <span>{t.inspector.lineTypeLabel}</span>
               <select
                 value={newEdgeLineType}
                 onChange={(event) => setNewEdgeLineType(event.target.value as EdgeLineType)}
               >
-                {LINE_TYPE_OPTIONS.map((line) => (
-                  <option key={line.value} value={line.value}>
-                    {line.label}
+                {LINE_TYPE_VALUES.map((lineValue) => (
+                  <option key={lineValue} value={lineValue}>
+                    {t.inspector.lineTypes[lineValue]}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="inspector-field">
-              <span>接続ラベル</span>
-              <input
-                type="text"
+              <span>{t.inspector.edgeLabelField}</span>
+              <GuardedInput
                 value={newEdgeLabel}
-                onChange={(event) => setNewEdgeLabel(event.target.value)}
-                placeholder="任意 (例: はい)"
+                onChangeValue={(nextVal) => setNewEdgeLabel(nextVal)}
+                forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                formatError={t.inspector.safeguard.syntaxErrorChars}
+                placeholder={t.inspector.edgeLabelPlaceholder}
               />
             </label>
           </div>
+
+          <div className="edge-add-grid">
+            <label className="inspector-field">
+              <span>{t.inspector.edgeLengthLabel}</span>
+              <select
+                value={newEdgeLength}
+                onChange={(event) => setNewEdgeLength(Number(event.target.value) || 0)}
+              >
+                {EDGE_LENGTH_VALUES.map((lenVal) => (
+                  <option key={lenVal} value={lenVal}>
+                    {getLengthOptionLabel(lenVal)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="inspector-field">
+              <span>{t.inspector.edgeLabelStyleLabel}</span>
+              <select
+                value={newEdgeLabelStyle}
+                onChange={(event) => setNewEdgeLabelStyle(event.target.value as EdgeLabelStyle)}
+                disabled={newEdgeLineType === 'invisible'}
+              >
+                <option value="pipe">{t.inspector.edgeLabelStyles.pipe}</option>
+                <option value="inline">{t.inspector.edgeLabelStyles.inline}</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="inspector-field">
+            <span>{t.inspector.edgeStrokeColorField}</span>
+            <select
+              value={newEdgeStrokeColor}
+              onChange={(event) => setNewEdgeStrokeColor(event.target.value)}
+            >
+              {STROKE_COLOR_PALETTE_ITEMS.map((item) => (
+                <option key={item.key} value={item.value}>
+                  {t.inspector.strokeColors[item.key]}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <button
             type="button"
@@ -366,13 +707,13 @@ export default function MermaidInspector({
             disabled={diagramData.nodes.length === 0}
           >
             <Plus size={14} />
-            <span>接続を追加</span>
+            <span>{t.inspector.addEdgeBtn}</span>
           </button>
         </div>
 
         <div className="edge-list-container">
           {diagramData.edges.length === 0 ? (
-            <p className="inspector-hint">登録されている接続線はありません。</p>
+            <p className="inspector-hint">{t.inspector.noEdgesHint}</p>
           ) : (
             diagramData.edges.map((edge) => (
               <div
@@ -385,7 +726,7 @@ export default function MermaidInspector({
               >
                 <div className="edge-item-row">
                   <select
-                    aria-label="接続元"
+                    aria-label={t.inspector.sourceLabel}
                     value={edge.source}
                     onChange={(event) =>
                       handleUpdateEdge(edge.id, { source: event.target.value })
@@ -399,7 +740,7 @@ export default function MermaidInspector({
                   </select>
                   <span className="edge-arrow-mark">→</span>
                   <select
-                    aria-label="接続先"
+                    aria-label={t.inspector.targetLabel}
                     value={edge.target}
                     onChange={(event) =>
                       handleUpdateEdge(edge.id, { target: event.target.value })
@@ -415,7 +756,7 @@ export default function MermaidInspector({
 
                 <div className="edge-item-row">
                   <select
-                    aria-label="線の種類"
+                    aria-label={t.inspector.lineTypeLabel}
                     value={edge.lineType}
                     onChange={(event) =>
                       handleUpdateEdge(edge.id, {
@@ -423,29 +764,30 @@ export default function MermaidInspector({
                       })
                     }
                   >
-                    {LINE_TYPE_OPTIONS.map((line) => (
-                      <option key={line.value} value={line.value}>
-                        {line.label}
+                    {LINE_TYPE_VALUES.map((lineValue) => (
+                      <option key={lineValue} value={lineValue}>
+                        {t.inspector.lineTypes[lineValue]}
                       </option>
                     ))}
                   </select>
 
-                  <input
-                    type="text"
-                    aria-label="接続ラベル"
+                  <GuardedInput
+                    ariaLabel={t.inspector.edgeLabelField}
                     value={edge.label ?? ''}
-                    onChange={(event) =>
+                    onChangeValue={(nextVal) =>
                       handleUpdateEdge(edge.id, {
-                        label: event.target.value || undefined,
+                        label: nextVal || undefined,
                       })
                     }
-                    placeholder="ラベルなし"
+                    forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                    formatError={t.inspector.safeguard.syntaxErrorChars}
+                    placeholder={t.inspector.edgeItemLabelPlaceholder}
                   />
 
                   <button
                     type="button"
                     className="btn-icon-danger"
-                    title="この接続を削除"
+                    title={t.inspector.deleteEdgeTitle}
                     onClick={(event) => {
                       event.stopPropagation();
                       handleDeleteEdge(edge.id);
@@ -454,10 +796,240 @@ export default function MermaidInspector({
                     <Trash2 size={14} />
                   </button>
                 </div>
+
+                <div className="edge-item-row">
+                  <select
+                    aria-label={t.inspector.edgeLengthLabel}
+                    value={edge.extraLength ?? 0}
+                    onChange={(event) => {
+                      const nextLen = Number(event.target.value) || 0;
+                      handleUpdateEdge(edge.id, {
+                        extraLength: nextLen > 0 ? nextLen : undefined,
+                      });
+                    }}
+                  >
+                    {EDGE_LENGTH_VALUES.map((lenVal) => (
+                      <option key={lenVal} value={lenVal}>
+                        {getLengthOptionLabel(lenVal)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    aria-label={t.inspector.edgeLabelStyleLabel}
+                    value={edge.labelStyle ?? 'pipe'}
+                    disabled={edge.lineType === 'invisible'}
+                    onChange={(event) => {
+                      const nextStyle = event.target.value as EdgeLabelStyle;
+                      handleUpdateEdge(edge.id, {
+                        labelStyle: nextStyle === 'pipe' ? undefined : nextStyle,
+                      });
+                    }}
+                  >
+                    <option value="pipe">{t.inspector.edgeLabelStyles.pipe}</option>
+                    <option value="inline">{t.inspector.edgeLabelStyles.inline}</option>
+                  </select>
+
+                  <select
+                    aria-label={t.inspector.edgeStrokeColorField}
+                    value={edge.strokeColor ?? ''}
+                    onChange={(event) =>
+                      handleUpdateEdge(edge.id, {
+                        strokeColor: event.target.value || undefined,
+                      })
+                    }
+                  >
+                    {STROKE_COLOR_PALETTE_ITEMS.map((item) => (
+                      <option key={item.key} value={item.value}>
+                        {t.inspector.strokeColors[item.key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             ))
           )}
         </div>
+      </section>
+
+      <section className="inspector-section">
+        <h3 className="inspector-heading">{t.inspector.subgraphsHeading}</h3>
+        <div className="edge-add-card">
+          <div className="edge-add-grid">
+            <label className="inspector-field">
+              <span>{t.inspector.subgraphTitleField}</span>
+              <GuardedInput
+                value={newSubgraphTitle}
+                onChangeValue={(nextVal) => setNewSubgraphTitle(nextVal)}
+                forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                formatError={t.inspector.safeguard.syntaxErrorChars}
+                placeholder={t.inspector.subgraphTitlePlaceholder}
+              />
+            </label>
+
+            <label className="inspector-field">
+              <span>{t.inspector.subgraphDirectionField}</span>
+              <select
+                value={newSubgraphDirection}
+                onChange={(event) =>
+                  setNewSubgraphDirection((event.target.value as MermaidDirection) || '')
+                }
+              >
+                <option value="">{t.inspector.subgraphDirectionInherit}</option>
+                {DIRECTION_VALUES.map((dir) => (
+                  <option key={dir} value={dir}>
+                    {t.inspector.directions[dir]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <button type="button" className="btn-primary btn-full" onClick={handleAddSubgraph}>
+            <Plus size={14} />
+            <span>{t.inspector.addSubgraphBtn}</span>
+          </button>
+        </div>
+
+        <div className="edge-list-container">
+          {subgraphs.length === 0 ? (
+            <p className="inspector-hint">{t.inspector.noSubgraphsHint}</p>
+          ) : (
+            subgraphs.map((sg) => (
+              <div key={sg.id} className="edge-list-item">
+                <div className="edge-item-row">
+                  <GuardedInput
+                    ariaLabel={t.inspector.subgraphTitleField}
+                    value={sg.title}
+                    onChangeValue={(nextVal) =>
+                      handleUpdateSubgraph(sg.id, { title: nextVal })
+                    }
+                    forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
+                    formatError={t.inspector.safeguard.syntaxErrorChars}
+                  />
+                  <select
+                    aria-label={t.inspector.subgraphDirectionField}
+                    value={sg.direction ?? ''}
+                    onChange={(event) =>
+                      handleUpdateSubgraph(sg.id, {
+                        direction: (event.target.value as MermaidDirection) || undefined,
+                      })
+                    }
+                  >
+                    <option value="">{t.inspector.subgraphDirectionInherit}</option>
+                    {DIRECTION_VALUES.map((dir) => (
+                      <option key={dir} value={dir}>
+                        {t.inspector.directions[dir]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn-icon-danger"
+                    title={t.inspector.deleteSubgraphTitle}
+                    onClick={() => handleDeleteSubgraph(sg.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="inspector-section">
+        <h3 className="inspector-heading">{t.inspector.classDefsHeading}</h3>
+        <div className="edge-add-card">
+          <label className="inspector-field">
+            <span>{t.inspector.classNameField}</span>
+            <GuardedInput
+              value={newClassName}
+              onChangeValue={(nextVal) => setNewClassName(nextVal)}
+              forbiddenRegex={FORBIDDEN_CLASS_NAME_CHARS_REGEX}
+              formatError={t.inspector.safeguard.classNameErrorChars}
+              placeholder={t.inspector.classNamePlaceholder}
+            />
+          </label>
+
+          <div className="edge-add-grid">
+            <label className="inspector-field">
+              <span>{t.inspector.classFillField}</span>
+              <select
+                value={newClassFill}
+                onChange={(event) => setNewClassFill(event.target.value)}
+              >
+                {COLOR_PALETTE_ITEMS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {t.inspector.colors[item.key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="inspector-field">
+              <span>{t.inspector.classStrokeField}</span>
+              <select
+                value={newClassStroke}
+                onChange={(event) => setNewClassStroke(event.target.value)}
+              >
+                {STROKE_COLOR_PALETTE_ITEMS.filter((item) => item.value !== '').map((item) => (
+                  <option key={item.key} value={item.value}>
+                    {t.inspector.strokeColors[item.key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <button type="button" className="btn-primary btn-full" onClick={handleAddClassDef}>
+            <Plus size={14} />
+            <span>{t.inspector.addClassDefBtn}</span>
+          </button>
+        </div>
+
+        <div className="edge-list-container">
+          {classDefs.length === 0 ? (
+            <p className="inspector-hint">{t.inspector.noClassDefsHint}</p>
+          ) : (
+            classDefs.map((cls) => (
+              <div key={cls.name} className="classdef-list-item">
+                <span
+                  className="classdef-preview-pill"
+                  style={{
+                    backgroundColor: cls.fill || '#ffffff',
+                    borderColor: cls.stroke || '#475569',
+                    color: cls.color || '#0f172a',
+                  }}
+                >
+                  .{cls.name}
+                </span>
+                <button
+                  type="button"
+                  className="btn-icon-danger"
+                  title={t.inspector.deleteClassDefTitle}
+                  onClick={() => handleDeleteClassDef(cls.name)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="inspector-section">
+        <h3 className="inspector-heading">{t.inspector.commentsHeading}</h3>
+        <label className="inspector-field">
+          <span>{t.inspector.commentsField}</span>
+          <textarea
+            className="inspector-comments-textarea"
+            rows={3}
+            value={(diagramData.comments ?? []).join('\n')}
+            onChange={(event) => handleCommentsChange(event.target.value)}
+            placeholder={t.inspector.commentsPlaceholder}
+          />
+        </label>
       </section>
     </aside>
   );
