@@ -1,5 +1,5 @@
-# ビルドステージ (linux/amd64, linux/arm64, linux/arm/v7 対応)
-FROM node:22-alpine AS builder
+# ビルドステージ (ホストCPUで高速にビルドし、成果物は全アーキテクチャで共有)
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 
