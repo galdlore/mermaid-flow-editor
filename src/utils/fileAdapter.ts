@@ -111,9 +111,10 @@ function downloadFallback(fileName: string, content: string): FileSaveResult {
   return { canceled: false, filePath: fileName };
 }
 
-/** 新規作成時にブラウザ側のファイルハンドル保持状態を初期化する */
+/** 新規作成時にファイルハンドル保持状態とElectron側認可状態を初期化する */
 export function resetBrowserFileHandle(): void {
   currentBrowserFileHandle = null;
+  void window.electronAPI?.resetFileSession?.();
 }
 
 /** 実行環境に応じてElectronダイアログまたはブラウザAPIでファイルを開く */

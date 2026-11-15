@@ -3,8 +3,16 @@ import type {
   PieLegendPosition,
   PieSliceData,
 } from '../types/editor';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+  sanitizeYamlSingleQuoted,
+  unquoteYamlString,
+} from './mermaidEnvelope';
 
-const GUI_STATE_PREFIX = '%% @gui-state:';
 const VALID_LEGEND_POSITIONS = new Set<PieLegendPosition>([
   'right',
   'left',
@@ -65,20 +73,11 @@ function sanitizePieTitle(raw: string): string {
     .trim();
 }
 
-function sanitizeYamlSingleQuoted(raw: string): string {
-  return raw.replace(/\r?\n/g, ' ').replace(/'/g, "''").trim();
-}
-
 function normalizePieData(data: PieDiagramData): PieDiagramData {
   const usedIds = new Set<string>();
   const slices: PieSliceData[] = data.slices.map((slice, index) => {
     const baseId = slice.id.replace(/[^a-zA-Z0-9_-]/g, '_') || `slice_${index + 1}`;
-    let uniqueId = baseId;
-    let suffix = 2;
-    while (usedIds.has(uniqueId)) {
-      uniqueId = `${baseId}_${suffix++}`;
-    }
-    usedIds.add(uniqueId);
+    const uniqueId = allocateUniqueId(baseId, usedIds);
 
     const numericVal =
       typeof slice.value === 'number' && Number.isFinite(slice.value)
@@ -105,10 +104,15 @@ function normalizePieData(data: PieDiagramData): PieDiagramData {
     data.legendPosition && VALID_LEGEND_POSITIONS.has(data.legendPosition)
       ? data.legendPosition
       : undefined;
-  const highlightSlice = data.highlightSlice?.trim() || undefined;
-  const comments = data.comments
-    ?.map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  const highlightSlice = data.highlightSlice
+    ? sanitizeSingleLineComment(data.highlightSlice)
+    : undefined;
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((line): line is string => typeof line === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((line) => line.length > 0)
+    : undefined;
 
   return {
     diagramType: 'pie',
@@ -172,37 +176,16 @@ export function generatePieCode(data: PieDiagramData): string {
     lines.push(`  "${safeLabel}" : ${slice.value}`);
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(normalized)}`);
+  lines.push(formatGuiStateLine(normalized));
   return lines.join('\n');
-}
-
-function unquoteYamlString(raw: string): string {
-  const trimmed = raw.trim();
-  if (
-    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-  ) {
-    return trimmed.slice(1, -1).replace(/''/g, "'");
-  }
-  return trimmed;
 }
 
 export function parsePieCodeToGuiData(code: string): PieDiagramData {
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidPieData(parsed)) {
-          return normalizePieData(parsed);
-        }
-      } catch {
-        // Ignore broken gui-state and parse plain Mermaid syntax
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidPieData);
+  if (restored) {
+    return normalizePieData(restored);
   }
 
   let title: string | undefined;

@@ -2,6 +2,72 @@ import mermaid from 'mermaid';
 
 let initialized = false;
 
+const DANGEROUS_SVG_TAGS = new Set([
+  'script',
+  'iframe',
+  'object',
+  'embed',
+  'applet',
+  'meta',
+  'link',
+]);
+
+function isSafeSvgHref(rawHref: string): boolean {
+  const trimmed = rawHref.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (trimmed.startsWith('#')) {
+    return true;
+  }
+  return /^https?:\/\//i.test(trimmed);
+}
+
+/** 描画済みSVGからスクリプト要素・イベントハンドラ属性・危険なURLスキームを除去する */
+export function sanitizeRenderedSvg(rawSvg: string): string {
+  if (!rawSvg || typeof DOMParser === 'undefined') {
+    return '';
+  }
+
+  const parser = new DOMParser();
+  let doc = parser.parseFromString(rawSvg, 'image/svg+xml');
+  let svgEl: Element | null = doc.querySelector('svg');
+
+  if (doc.querySelector('parsererror') || !svgEl) {
+    doc = parser.parseFromString(rawSvg, 'text/html');
+    svgEl = doc.querySelector('svg');
+  }
+
+  if (!svgEl) {
+    return '';
+  }
+
+  const allElements = [svgEl, ...Array.from(svgEl.querySelectorAll('*'))];
+  for (const el of allElements) {
+    const tagName = el.localName?.toLowerCase() ?? el.tagName.toLowerCase();
+    if (DANGEROUS_SVG_TAGS.has(tagName)) {
+      el.remove();
+      continue;
+    }
+
+    for (const attr of Array.from(el.attributes)) {
+      const attrName = attr.name.toLowerCase();
+      if (attrName.startsWith('on')) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+
+      if (attrName === 'href' || attrName === 'xlink:href') {
+        if (!isSafeSvgHref(attr.value)) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    }
+  }
+
+  return svgEl.outerHTML || new XMLSerializer().serializeToString(svgEl);
+}
+
 /** Mermaidの初期化をアプリ全体で一度だけ行う */
 export function ensureMermaidInitialized(): void {
   if (initialized) {
@@ -10,7 +76,7 @@ export function ensureMermaidInitialized(): void {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'default',
-    securityLevel: 'loose',
+    securityLevel: 'strict',
   });
   initialized = true;
 }
@@ -37,7 +103,7 @@ export async function renderMermaidSvg(
 
   try {
     const result = await mermaid.render(renderId, code);
-    return { svg: result.svg, error: null };
+    return { svg: sanitizeRenderedSvg(result.svg), error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Mermaidの描画に失敗しました。';
     return { svg: '', error: message };

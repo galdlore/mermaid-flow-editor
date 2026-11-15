@@ -15,6 +15,7 @@ interface ElectronBridgeAPI {
   openFile: () => Promise<FileOpenResult>;
   saveFile: (filePath: string | null, content: string) => Promise<FileSaveResult>;
   saveFileAs: (content: string) => Promise<FileSaveResult>;
+  resetFileSession: () => Promise<void>;
 }
 
 const electronAPI: ElectronBridgeAPI = {
@@ -23,6 +24,7 @@ const electronAPI: ElectronBridgeAPI = {
     ipcRenderer.invoke('file:save', filePath, content) as Promise<FileSaveResult>,
   saveFileAs: (content: string) =>
     ipcRenderer.invoke('file:saveAs', content) as Promise<FileSaveResult>,
+  resetFileSession: () => ipcRenderer.invoke('file:resetSession') as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

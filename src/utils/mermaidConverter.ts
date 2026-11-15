@@ -10,8 +10,13 @@ import type {
   MermaidSubgraphData,
   NodeShape,
 } from '../types/editor';
-
-const GUI_STATE_PREFIX = '%% @gui-state:';
+import { sanitizeCssColor, sanitizeSafeUrl } from './inputSafeguard';
+import {
+  GUI_STATE_PREFIX,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
 const VALID_DIRECTIONS: ReadonlyArray<MermaidDirection> = ['TD', 'LR', 'BT', 'RL'];
 const VALID_SHAPES: ReadonlyArray<NodeShape> = [
@@ -210,6 +215,42 @@ export function detectMermaidDiagramType(code: string): MermaidDiagramType {
         ) {
           return 'quadrantChart';
         }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'sequence' &&
+          Array.isArray((parsed as { participants?: unknown }).participants) &&
+          Array.isArray((parsed as { steps?: unknown }).steps)
+        ) {
+          return 'sequence';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'er' &&
+          Array.isArray((parsed as { entities?: unknown }).entities) &&
+          Array.isArray((parsed as { relationships?: unknown }).relationships)
+        ) {
+          return 'er';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'class' &&
+          Array.isArray((parsed as { classes?: unknown }).classes) &&
+          Array.isArray((parsed as { relations?: unknown }).relations)
+        ) {
+          return 'class';
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'state' &&
+          Array.isArray((parsed as { states?: unknown }).states) &&
+          Array.isArray((parsed as { transitions?: unknown }).transitions)
+        ) {
+          return 'state';
+        }
         if (isValidDiagramData(parsed) && parsed.diagramType === 'swimlane') {
           return 'swimlane';
         }
@@ -257,6 +298,18 @@ export function detectMermaidDiagramType(code: string): MermaidDiagramType {
     }
     if (/^quadrantChart\b/i.test(trimmed)) {
       return 'quadrantChart';
+    }
+    if (/^sequenceDiagram\b/i.test(trimmed)) {
+      return 'sequence';
+    }
+    if (/^erDiagram\b/i.test(trimmed)) {
+      return 'er';
+    }
+    if (/^classDiagram(?:-v2)?\b/i.test(trimmed)) {
+      return 'class';
+    }
+    if (/^stateDiagram(?:-v2)?\b/i.test(trimmed)) {
+      return 'state';
     }
     if (/^swimlane-beta\b/i.test(trimmed)) {
       return 'swimlane';
@@ -411,7 +464,112 @@ function emitNodeLines(lines: string[], node: MermaidNodeData, indent: string): 
   }
 }
 
-export function generateMermaidCode(data: MermaidDiagramData): string {
+export function normalizeDiagramData(data: MermaidDiagramData): MermaidDiagramData {
+  const direction: MermaidDirection = VALID_DIRECTIONS.includes(data.direction)
+    ? data.direction
+    : 'TD';
+
+  const nodes: MermaidNodeData[] = data.nodes.map((node) => {
+    const color = sanitizeCssColor(node.color);
+    const strokeColor = sanitizeCssColor(node.strokeColor);
+    const linkUrl = sanitizeSafeUrl(node.linkUrl);
+    const linkTooltip = node.linkTooltip
+      ? sanitizeSingleLineComment(node.linkTooltip)
+      : '';
+    const className = node.className ? sanitizeClassName(node.className) : '';
+    const posX = Number.isFinite(node.position?.x) ? node.position.x : 0;
+    const posY = Number.isFinite(node.position?.y) ? node.position.y : 0;
+
+    return {
+      id: node.id,
+      label: node.label,
+      shape: VALID_SHAPES.includes(node.shape) ? node.shape : 'rect',
+      ...(color ? { color } : {}),
+      ...(strokeColor ? { strokeColor } : {}),
+      ...(className ? { className } : {}),
+      ...(node.subgraphId ? { subgraphId: node.subgraphId } : {}),
+      ...(linkUrl ? { linkUrl } : {}),
+      ...(linkTooltip ? { linkTooltip } : {}),
+      position: { x: posX, y: posY },
+    };
+  });
+
+  const edges: MermaidEdgeData[] = data.edges.map((edge) => {
+    const strokeColor = sanitizeCssColor(edge.strokeColor);
+    const rawExtra = edge.extraLength;
+    const extraLength =
+      typeof rawExtra === 'number' && Number.isFinite(rawExtra)
+        ? Math.max(0, Math.min(3, Math.round(rawExtra)))
+        : 0;
+    const labelStyle =
+      edge.labelStyle === 'inline' || edge.labelStyle === 'pipe'
+        ? edge.labelStyle
+        : undefined;
+
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      ...(edge.label ? { label: edge.label } : {}),
+      lineType: VALID_LINE_TYPES.includes(edge.lineType) ? edge.lineType : 'arrow',
+      ...(extraLength > 0 ? { extraLength } : {}),
+      ...(labelStyle ? { labelStyle } : {}),
+      ...(strokeColor ? { strokeColor } : {}),
+    };
+  });
+
+  const subgraphs: MermaidSubgraphData[] | undefined = data.subgraphs
+    ?.map((sg) => {
+      const fill = sanitizeCssColor(sg.fill);
+      const stroke = sanitizeCssColor(sg.stroke);
+      const sgDir =
+        sg.direction && VALID_DIRECTIONS.includes(sg.direction)
+          ? sg.direction
+          : undefined;
+      return {
+        id: sg.id,
+        title: sg.title,
+        ...(sgDir ? { direction: sgDir } : {}),
+        ...(fill ? { fill } : {}),
+        ...(stroke ? { stroke } : {}),
+      };
+    });
+
+  const classDefs: MermaidClassDefData[] | undefined = data.classDefs
+    ?.map((cls) => {
+      const name = sanitizeClassName(cls.name);
+      if (!name) {
+        return null;
+      }
+      const fill = sanitizeCssColor(cls.fill);
+      const stroke = sanitizeCssColor(cls.stroke);
+      const color = sanitizeCssColor(cls.color);
+      return {
+        name,
+        ...(fill ? { fill } : {}),
+        ...(stroke ? { stroke } : {}),
+        ...(color ? { color } : {}),
+      };
+    })
+    .filter((cls): cls is MermaidClassDefData => cls !== null);
+
+  const comments = data.comments
+    ?.map(sanitizeSingleLineComment)
+    .filter((line) => line.length > 0);
+
+  return {
+    ...(data.diagramType === 'swimlane' ? { diagramType: 'swimlane' as const } : {}),
+    direction,
+    nodes,
+    edges,
+    ...(subgraphs && subgraphs.length > 0 ? { subgraphs } : {}),
+    ...(classDefs && classDefs.length > 0 ? { classDefs } : {}),
+    ...(comments && comments.length > 0 ? { comments } : {}),
+  };
+}
+
+export function generateMermaidCode(rawData: MermaidDiagramData): string {
+  const data = normalizeDiagramData(rawData);
   const isSwimlane = data.diagramType === 'swimlane';
   const headerLine = isSwimlane
     ? `swimlane-beta ${data.direction}`
@@ -419,7 +577,7 @@ export function generateMermaidCode(data: MermaidDiagramData): string {
   const lines: string[] = [headerLine];
 
   for (const comment of data.comments ?? []) {
-    const clean = comment.replace(/\r?\n/g, ' ').trim();
+    const clean = sanitizeSingleLineComment(comment);
     if (clean) {
       lines.push(`  %% ${clean}`);
     }
@@ -505,16 +663,17 @@ export function generateMermaidCode(data: MermaidDiagramData): string {
   lines.push(...linkStyleLines);
 
   for (const node of data.nodes) {
-    if (node.linkUrl && node.linkUrl.trim()) {
-      const safeUrl = node.linkUrl.trim().replace(/"/g, '%22');
+    const safeUrl = sanitizeSafeUrl(node.linkUrl);
+    if (safeUrl) {
+      const encodedUrl = safeUrl.replace(/"/g, '%22');
       const tooltip = node.linkTooltip?.trim()
         ? ` "${sanitizeMermaidText(node.linkTooltip.trim())}"`
         : '';
-      lines.push(`  click ${sanitizeId(node.id)} "${safeUrl}"${tooltip}`);
+      lines.push(`  click ${sanitizeId(node.id)} "${encodedUrl}"${tooltip}`);
     }
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(data)}`);
+  lines.push(formatGuiStateLine(data));
   return lines.join('\n');
 }
 
@@ -947,19 +1106,9 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
 
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidDiagramData(parsed)) {
-          return parsed;
-        }
-      } catch {
-        // JSON解析失敗時は手書き構文の解析へフォールバックする
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidDiagramData);
+  if (restored) {
+    return normalizeDiagramData(restored);
   }
 
   let diagramType: 'flowchart' | 'swimlane' | undefined;
@@ -1215,7 +1364,7 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
     },
   }));
 
-  return {
+  return normalizeDiagramData({
     ...(diagramType ? { diagramType } : {}),
     direction,
     nodes,
@@ -1223,5 +1372,5 @@ export function parseMermaidCodeToGuiData(code: string): MermaidDiagramData {
     ...(subgraphs.length > 0 ? { subgraphs } : {}),
     ...(classDefs.length > 0 ? { classDefs } : {}),
     ...(comments.length > 0 ? { comments } : {}),
-  };
+  });
 }

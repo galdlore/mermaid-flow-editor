@@ -11,6 +11,20 @@ export const FORBIDDEN_MINDMAP_ICON_CHARS_REGEX = /[)\r\n]/g;
 export const FORBIDDEN_MINDMAP_CLASS_CHARS_REGEX = /[^a-zA-Z0-9_ -]/g;
 export const FORBIDDEN_QUADRANT_TEXT_CHARS_REGEX = /["\r\n]/g;
 export const FORBIDDEN_QUADRANT_CLASS_CHARS_REGEX = /[^a-zA-Z0-9]/g;
+export const FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX = /[;\r\n]/g;
+export const FORBIDDEN_SEQUENCE_ALIAS_CHARS_REGEX = /[:;\r\n]/g;
+export const FORBIDDEN_SEQUENCE_ID_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
+export const FORBIDDEN_ER_ENTITY_ID_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
+export const FORBIDDEN_ER_QUOTED_TEXT_CHARS_REGEX = /["\r\n]/g;
+export const FORBIDDEN_ER_ATTR_TYPE_CHARS_REGEX = /[\s"{};\r\n]/g;
+export const FORBIDDEN_ER_ATTR_NAME_CHARS_REGEX = /[\s"{},;\r\n]/g;
+export const FORBIDDEN_CLASS_ID_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
+export const FORBIDDEN_CLASS_GENERIC_CHARS_REGEX = /[;{}\r\n~"`<>]/g;
+export const FORBIDDEN_CLASS_QUOTED_TEXT_CHARS_REGEX = /["\r\n;]/g;
+export const FORBIDDEN_CLASS_MEMBER_CHARS_REGEX = /[;{}\r\n]/g;
+export const FORBIDDEN_STATE_ID_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
+export const FORBIDDEN_STATE_LABEL_CHARS_REGEX = /["\r\n]/g;
+export const FORBIDDEN_STATE_TEXT_CHARS_REGEX = /[;\r\n]/g;
 export const FORBIDDEN_URL_CHARS_REGEX = /["\s]/g;
 export const FORBIDDEN_CLASS_NAME_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
 
@@ -40,4 +54,41 @@ export function filterForbiddenChars(
     cleaned: rawValue.replace(globalRegex, ''),
     blockedChars: Array.from(new Set(matches)),
   };
+}
+
+/**
+ * URLスキームをホワイトリスト検証し、安全な http(s) または相対パス・フラグメントのみ許可する。
+ */
+export function sanitizeSafeUrl(raw?: string): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const cleaned = raw.trim().replace(/["\s\r\n<>\\]/g, '');
+  if (!cleaned) {
+    return undefined;
+  }
+
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(cleaned)) {
+    return /^https?:\/\//i.test(cleaned) ? cleaned : undefined;
+  }
+
+  if (cleaned.startsWith('/') || cleaned.startsWith('#')) {
+    return cleaned;
+  }
+
+  return undefined;
+}
+
+/**
+ * CSS色指定として安全な16進カラーコードまたは色名のみを許可する。
+ */
+export function sanitizeCssColor(raw?: string): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(trimmed) || /^[a-zA-Z]{3,20}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return undefined;
 }

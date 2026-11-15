@@ -4,8 +4,17 @@ import type {
   KanbanDiagramData,
   KanbanPriority,
 } from '../types/editor';
+import { sanitizeSafeUrl } from './inputSafeguard';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+  sanitizeYamlSingleQuoted,
+  unquoteYamlString,
+} from './mermaidEnvelope';
 
-const GUI_STATE_PREFIX = '%% @gui-state:';
 const VALID_PRIORITIES = new Set<KanbanPriority>([
   'Very High',
   'High',
@@ -116,21 +125,12 @@ function sanitizeKanbanMetaValue(raw: string): string {
     .trim();
 }
 
-function sanitizeYamlSingleQuoted(raw: string): string {
-  return raw.replace(/\r?\n/g, ' ').replace(/'/g, "''").trim();
-}
-
 function normalizeKanbanData(data: KanbanDiagramData): KanbanDiagramData {
   const usedIds = new Set<string>();
   const columnIdMap = new Map<string, string>();
   const columns: KanbanColumnData[] = data.columns.map((col, index) => {
     const baseId = sanitizeKanbanId(col.id, `col_${index + 1}`);
-    let uniqueId = baseId;
-    let suffix = 2;
-    while (usedIds.has(uniqueId)) {
-      uniqueId = `${baseId}_${suffix++}`;
-    }
-    usedIds.add(uniqueId);
+    const uniqueId = allocateUniqueId(baseId, usedIds);
     columnIdMap.set(col.id, uniqueId);
     return {
       id: uniqueId,
@@ -149,12 +149,7 @@ function normalizeKanbanData(data: KanbanDiagramData): KanbanDiagramData {
       return;
     }
     const baseId = sanitizeKanbanId(card.id, `task_${index + 1}`);
-    let uniqueId = baseId;
-    let suffix = 2;
-    while (usedIds.has(uniqueId)) {
-      uniqueId = `${baseId}_${suffix++}`;
-    }
-    usedIds.add(uniqueId);
+    const uniqueId = allocateUniqueId(baseId, usedIds);
 
     const assigned = card.assigned?.trim() || undefined;
     const ticket = card.ticket?.trim() || undefined;
@@ -173,10 +168,13 @@ function normalizeKanbanData(data: KanbanDiagramData): KanbanDiagramData {
     });
   });
 
-  const comments = data.comments
-    ?.map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  const ticketBaseUrl = data.ticketBaseUrl?.trim() || undefined;
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((line): line is string => typeof line === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((line) => line.length > 0)
+    : undefined;
+  const ticketBaseUrl = sanitizeSafeUrl(data.ticketBaseUrl);
   const sectionWidth =
     typeof data.sectionWidth === 'number' &&
     Number.isFinite(data.sectionWidth) &&
@@ -261,19 +259,8 @@ export function generateKanbanCode(data: KanbanDiagramData): string {
     }
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(normalized)}`);
+  lines.push(formatGuiStateLine(normalized));
   return lines.join('\n');
-}
-
-function unquoteYamlString(raw: string): string {
-  const trimmed = raw.trim();
-  if (
-    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-  ) {
-    return trimmed.slice(1, -1).replace(/''/g, "'");
-  }
-  return trimmed;
 }
 
 function parseShapeDataBlock(rawBlock: string): Record<string, string> {
@@ -390,19 +377,9 @@ function parseKanbanLine(
 export function parseKanbanCodeToGuiData(code: string): KanbanDiagramData {
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidKanbanData(parsed)) {
-          return normalizeKanbanData(parsed);
-        }
-      } catch {
-        // Ignore broken gui-state and fall back to text parsing
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidKanbanData);
+  if (restored) {
+    return normalizeKanbanData(restored);
   }
 
   let ticketBaseUrl: string | undefined;

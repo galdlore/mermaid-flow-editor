@@ -5,8 +5,13 @@ import type {
   XYChartSeriesType,
   XYChartXAxisType,
 } from '../types/editor';
-
-const GUI_STATE_PREFIX = '%% @gui-state:';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
 export function createDefaultXYChartData(
   lang: 'ja' | 'en' = 'ja'
@@ -88,12 +93,7 @@ function normalizeXYChartData(data: XYChartDiagramData): XYChartDiagramData {
   const series: XYChartSeriesData[] = data.series.map((s, index) => {
     const baseId =
       s.id.replace(/[^a-zA-Z0-9_-]/g, '_') || `series_${index + 1}`;
-    let uniqueId = baseId;
-    let suffix = 2;
-    while (usedIds.has(uniqueId)) {
-      uniqueId = `${baseId}_${suffix++}`;
-    }
-    usedIds.add(uniqueId);
+    const uniqueId = allocateUniqueId(baseId, usedIds);
 
     const values = s.values.map((v) =>
       typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(4)) : 0
@@ -148,9 +148,12 @@ function normalizeXYChartData(data: XYChartDiagramData): XYChartDiagramData {
       ? Math.round(data.chartHeight)
       : undefined;
 
-  const comments = data.comments
-    ?.map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((line): line is string => typeof line === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((line) => line.length > 0)
+    : undefined;
 
   return {
     diagramType: 'xychart',
@@ -253,7 +256,7 @@ export function generateXYChartCode(data: XYChartDiagramData): string {
     lines.push(`  ${series.type}${titlePart} [${adjustedValues.join(', ')}]`);
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(normalized)}`);
+  lines.push(formatGuiStateLine(normalized));
   return lines.join('\n');
 }
 
@@ -328,19 +331,9 @@ function parseBracketStringList(bracketContent: string): string[] {
 export function parseXYChartCodeToGuiData(code: string): XYChartDiagramData {
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidXYChartData(parsed)) {
-          return normalizeXYChartData(parsed);
-        }
-      } catch {
-        // Ignore invalid gui-state and parse raw xychart text
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidXYChartData);
+  if (restored) {
+    return normalizeXYChartData(restored);
   }
 
   let orientation: XYChartOrientation = 'vertical';

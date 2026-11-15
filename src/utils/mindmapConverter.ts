@@ -4,8 +4,13 @@ import type {
   MindmapNodeData,
   MindmapNodeShape,
 } from '../types/editor';
-
-const GUI_STATE_PREFIX = '%% @gui-state:';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
 export const DEFAULT_MINDMAP_CONFIG: MindmapConfigData = {
   padding: 10,
@@ -141,13 +146,7 @@ export function normalizeMindmapNodes(
         : i === 0
           ? 'root'
           : `mm_${i}`;
-    let id = baseId;
-    let suffix = 2;
-    while (usedIds.has(id)) {
-      id = `${baseId}_${suffix}`;
-      suffix++;
-    }
-    usedIds.add(id);
+    const id = allocateUniqueId(baseId, usedIds);
 
     const depth =
       i === 0
@@ -183,9 +182,12 @@ export function normalizeMindmapNodes(
 }
 
 function normalizeMindmapData(data: MindmapDiagramData): MindmapDiagramData {
-  const comments = data.comments
-    ?.map((c) => c.trim())
-    .filter((c) => c.length > 0);
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((c): c is string => typeof c === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((c) => c.length > 0)
+    : undefined;
   return {
     diagramType: 'mindmap',
     config: normalizeConfig(data.config),
@@ -379,7 +381,7 @@ export function generateMindmapCode(data: MindmapDiagramData): string {
     }
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(normalized)}`);
+  lines.push(formatGuiStateLine(normalized));
   return lines.join('\n');
 }
 
@@ -446,19 +448,9 @@ function parseMindmapNodeLine(
 export function parseMindmapCodeToGuiData(code: string): MindmapDiagramData {
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidMindmapData(parsed)) {
-          return normalizeMindmapData(parsed);
-        }
-      } catch {
-        // Fallback to raw text parser
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidMindmapData);
+  if (restored) {
+    return normalizeMindmapData(restored);
   }
 
   const config: MindmapConfigData = { ...DEFAULT_MINDMAP_CONFIG };

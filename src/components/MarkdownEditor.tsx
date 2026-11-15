@@ -20,20 +20,15 @@ import {
   TAB_SIZE_OPTIONS,
   type TabSizeOption,
 } from '../utils/markdownTabIndent';
+import { extractMermaidBlocks } from '../utils/markdownMermaidBlocks';
+import { readLocalStorage, writeLocalStorage } from '../utils/storage';
 
 const TAB_SIZE_STORAGE_KEY = 'mermaid-flow-editor:tab-size';
 
 function loadInitialTabSize(): TabSizeOption {
-  if (typeof window === 'undefined') {
-    return 2;
-  }
-  try {
-    const raw = Number(window.localStorage.getItem(TAB_SIZE_STORAGE_KEY));
-    if (raw === 4) {
-      return 4;
-    }
-  } catch {
-    // ストレージ参照不可時は規定値を使う
+  const raw = Number(readLocalStorage(TAB_SIZE_STORAGE_KEY));
+  if (raw === 4) {
+    return 4;
   }
   return 2;
 }
@@ -48,44 +43,6 @@ export interface MarkdownEditorProps {
   value: string;
   onChange: (nextValue: string) => void;
   onEditMermaid: (blockIndex: number, code: string) => void;
-}
-
-interface MermaidBlockMeta {
-  index: number;
-  startLine: number;
-  endLine: number;
-  code: string;
-}
-
-function extractMermaidBlocks(markdown: string): MermaidBlockMeta[] {
-  const lines = markdown.split(/\r?\n/);
-  const blocks: MermaidBlockMeta[] = [];
-  let inMermaid = false;
-  let startLine = 0;
-  let buffer: string[] = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
-    if (!inMermaid) {
-      if (/^```\s*mermaid\b/i.test(trimmed)) {
-        inMermaid = true;
-        startLine = i + 1;
-        buffer = [];
-      }
-    } else if (/^```\s*$/.test(trimmed)) {
-      blocks.push({
-        index: blocks.length,
-        startLine,
-        endLine: i + 1,
-        code: buffer.join('\n'),
-      });
-      inMermaid = false;
-    } else {
-      buffer.push(lines[i]);
-    }
-  }
-
-  return blocks;
 }
 
 interface MermaidPreviewBlockProps {
@@ -156,18 +113,13 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     const { t } = useI18n();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
+    const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit');
 
     const mermaidBlocks = useMemo(() => extractMermaidBlocks(value), [value]);
 
     const handleTabSizeChange = (nextSize: TabSizeOption): void => {
       setTabSize(nextSize);
-      if (typeof window !== 'undefined') {
-        try {
-          window.localStorage.setItem(TAB_SIZE_STORAGE_KEY, String(nextSize));
-        } catch {
-          // ストレージ保存エラーは無視する
-        }
-      }
+      writeLocalStorage(TAB_SIZE_STORAGE_KEY, String(nextSize));
     };
 
     const applyEdit = (
@@ -284,7 +236,28 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     };
 
     return (
-      <div className="editor-split-pane">
+      <div className="editor-workspace-root">
+        <div className="mobile-editor-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === 'edit'}
+            className={`mobile-editor-tab-btn ${mobilePane === 'edit' ? 'is-active' : ''}`}
+            onClick={() => setMobilePane('edit')}
+          >
+            {t.editor.editorPaneHeader}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === 'preview'}
+            className={`mobile-editor-tab-btn ${mobilePane === 'preview' ? 'is-active' : ''}`}
+            onClick={() => setMobilePane('preview')}
+          >
+            {t.editor.previewPaneHeader}
+          </button>
+        </div>
+        <div className="editor-split-pane" data-mobile-active={mobilePane}>
         <section className="editor-pane-left">
           <div className="pane-header">
             <span>{t.editor.editorPaneHeader}</span>
@@ -357,6 +330,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             </div>
           </div>
         </section>
+        </div>
       </div>
     );
   }

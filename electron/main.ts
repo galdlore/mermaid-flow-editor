@@ -1,8 +1,22 @@
-import { app, BrowserWindow, dialog, ipcMain, type FileFilter } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, type FileFilter } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 let mainWindow: BrowserWindow | null = null;
+const authorizedFilePaths = new Set<string>();
+
+function normalizeAuthorizedPath(filePath: string): string {
+  return path.resolve(filePath);
+}
+
+function isSafeExternalUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 
 const MARKDOWN_FILTERS: FileFilter[] = [
   { name: 'Markdown', extensions: ['md', 'markdown'] },
@@ -20,6 +34,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
@@ -29,6 +44,23 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowedPrefix = devUrl || 'file://';
+    if (!url.startsWith(allowedPrefix)) {
+      event.preventDefault();
+      if (isSafeExternalUrl(url)) {
+        void shell.openExternal(url);
+      }
+    }
+  });
 
   mainWindow.webContents.on('will-prevent-unload', (event) => {
     if (!mainWindow) {
@@ -70,8 +102,10 @@ async function saveWithDialog(content: string): Promise<{ canceled: boolean; fil
     return { canceled: true };
   }
 
-  await writeFile(result.filePath, content, 'utf-8');
-  return { canceled: false, filePath: result.filePath };
+  const resolvedPath = normalizeAuthorizedPath(result.filePath);
+  authorizedFilePaths.add(resolvedPath);
+  await writeFile(resolvedPath, content, 'utf-8');
+  return { canceled: false, filePath: resolvedPath };
 }
 
 function registerIpcHandlers(): void {
@@ -90,22 +124,39 @@ function registerIpcHandlers(): void {
       return { canceled: true };
     }
 
-    const filePath = result.filePaths[0];
-    const content = await readFile(filePath, 'utf-8');
-    return { canceled: false, filePath, content };
+    const resolvedPath = normalizeAuthorizedPath(result.filePaths[0]);
+    const content = await readFile(resolvedPath, 'utf-8');
+    authorizedFilePaths.add(resolvedPath);
+    return { canceled: false, filePath: resolvedPath, content };
   });
 
-  ipcMain.handle('file:save', async (_event, filePath: string | null, content: string) => {
-    if (!filePath) {
+  ipcMain.handle('file:save', async (_event, filePath: unknown, content: unknown) => {
+    if (typeof content !== 'string') {
+      throw new Error('Invalid file content.');
+    }
+
+    if (typeof filePath !== 'string' || !filePath.trim()) {
       return saveWithDialog(content);
     }
 
-    await writeFile(filePath, content, 'utf-8');
-    return { canceled: false, filePath };
+    const resolvedPath = normalizeAuthorizedPath(filePath);
+    if (!authorizedFilePaths.has(resolvedPath)) {
+      return saveWithDialog(content);
+    }
+
+    await writeFile(resolvedPath, content, 'utf-8');
+    return { canceled: false, filePath: resolvedPath };
   });
 
-  ipcMain.handle('file:saveAs', async (_event, content: string) => {
+  ipcMain.handle('file:saveAs', async (_event, content: unknown) => {
+    if (typeof content !== 'string') {
+      throw new Error('Invalid file content.');
+    }
     return saveWithDialog(content);
+  });
+
+  ipcMain.handle('file:resetSession', () => {
+    authorizedFilePaths.clear();
   });
 }
 

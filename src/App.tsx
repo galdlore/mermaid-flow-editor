@@ -15,39 +15,10 @@ import {
   saveMarkdownFile,
   saveMarkdownFileAs,
 } from './utils/fileAdapter';
+import { replaceMermaidBlock } from './utils/markdownMermaidBlocks';
+import { isElectronEnv, readLocalStorage, writeLocalStorage } from './utils/storage';
 
 const DRAFT_STORAGE_KEY = 'mermaid-flow-editor:draft';
-
-function replaceMermaidBlock(
-  markdown: string,
-  targetBlockIndex: number,
-  newMermaidCode: string
-): string {
-  const lines = markdown.split(/\r?\n/);
-  let currentIndex = -1;
-  let inMermaid = false;
-  let startLine = -1;
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
-    if (!inMermaid) {
-      if (/^```\s*mermaid\b/i.test(trimmed)) {
-        inMermaid = true;
-        currentIndex += 1;
-        startLine = i;
-      }
-    } else if (/^```\s*$/.test(trimmed)) {
-      if (currentIndex === targetBlockIndex) {
-        const replacementLines = ['```mermaid', ...newMermaidCode.split(/\r?\n/), '```'];
-        lines.splice(startLine, i - startLine + 1, ...replacementLines);
-        return lines.join('\n');
-      }
-      inMermaid = false;
-    }
-  }
-
-  return markdown;
-}
 
 function getDisplayFileName(filePath: string | null, untitledFileName: string): string {
   if (!filePath) {
@@ -58,14 +29,10 @@ function getDisplayFileName(filePath: string | null, untitledFileName: string): 
 }
 
 function loadInitialMarkdown(lang: Language): string {
-  if (typeof window !== 'undefined' && !window.electronAPI) {
-    try {
-      const savedDraft = window.localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (savedDraft && savedDraft.trim().length > 0) {
-        return savedDraft;
-      }
-    } catch {
-      // ストレージ参照不可時は初期テキストを使用する
+  if (!isElectronEnv()) {
+    const savedDraft = readLocalStorage(DRAFT_STORAGE_KEY);
+    if (savedDraft && savedDraft.trim().length > 0) {
+      return savedDraft;
     }
   }
   return getInitialMarkdownByLang(lang);
@@ -105,14 +72,10 @@ export default function App() {
   }, [lang, isDirty, markdownText]);
 
   useEffect(() => {
-    if (window.electronAPI) {
+    if (isElectronEnv()) {
       return;
     }
-    try {
-      window.localStorage.setItem(DRAFT_STORAGE_KEY, markdownText);
-    } catch {
-      // ストレージ容量超過等のエラーは無視する
-    }
+    writeLocalStorage(DRAFT_STORAGE_KEY, markdownText);
   }, [markdownText]);
 
   const handleChangeText = useCallback((next: string) => {

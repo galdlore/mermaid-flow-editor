@@ -4,8 +4,13 @@ import type {
   QuadrantDiagramData,
   QuadrantPointData,
 } from '../types/editor';
-
-const GUI_STATE_PREFIX = '%% @gui-state:';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
 export const DEFAULT_QUADRANT_CONFIG: QuadrantConfigData = {
   chartWidth: 500,
@@ -147,16 +152,13 @@ function normalizeQuadrantData(data: QuadrantDiagramData): QuadrantDiagramData {
   const usedPointIds = new Set<string>();
   const points: QuadrantPointData[] = data.points.map((pt, index) => {
     const baseId =
-      pt.id && /^[a-zA-Z0-9_-]+$/.test(pt.id) ? pt.id : `pt_${index + 1}`;
-    let id = baseId;
-    let suffix = 2;
-    while (usedPointIds.has(id)) {
-      id = `${baseId}_${suffix}`;
-      suffix++;
-    }
-    usedPointIds.add(id);
+      typeof pt.id === 'string' && /^[a-zA-Z0-9_-]+$/.test(pt.id)
+        ? pt.id
+        : `pt_${index + 1}`;
+    const id = allocateUniqueId(baseId, usedPointIds);
 
-    const label = sanitizeQuotedText(pt.label) || `Point ${index + 1}`;
+    const rawLabel = typeof pt.label === 'string' ? pt.label : '';
+    const label = sanitizeQuotedText(rawLabel) || `Point ${index + 1}`;
     const className = sanitizeClassName(pt.className);
     const radius = sanitizePositiveInt(pt.radius, 2, 40);
     const color = sanitizeHexColor(pt.color);
@@ -183,25 +185,28 @@ function normalizeQuadrantData(data: QuadrantDiagramData): QuadrantDiagramData {
     sanitizePositiveInt(data.config?.chartHeight, 240, 1400) ??
     DEFAULT_QUADRANT_CONFIG.chartHeight;
 
-  const comments = data.comments
-    ?.map((c) => c.trim())
-    .filter((c) => c.length > 0);
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((c): c is string => typeof c === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((c) => c.length > 0)
+    : undefined;
 
   return {
     diagramType: 'quadrantChart',
     ...(title ? { title } : {}),
-    xAxisLeft: sanitizeQuotedText(data.xAxisLeft),
-    ...(data.xAxisRight && sanitizeQuotedText(data.xAxisRight)
+    xAxisLeft: sanitizeQuotedText(typeof data.xAxisLeft === 'string' ? data.xAxisLeft : ''),
+    ...(typeof data.xAxisRight === 'string' && sanitizeQuotedText(data.xAxisRight)
       ? { xAxisRight: sanitizeQuotedText(data.xAxisRight) }
       : {}),
-    yAxisBottom: sanitizeQuotedText(data.yAxisBottom),
-    ...(data.yAxisTop && sanitizeQuotedText(data.yAxisTop)
+    yAxisBottom: sanitizeQuotedText(typeof data.yAxisBottom === 'string' ? data.yAxisBottom : ''),
+    ...(typeof data.yAxisTop === 'string' && sanitizeQuotedText(data.yAxisTop)
       ? { yAxisTop: sanitizeQuotedText(data.yAxisTop) }
       : {}),
-    quadrant1: sanitizeQuotedText(data.quadrant1),
-    quadrant2: sanitizeQuotedText(data.quadrant2),
-    quadrant3: sanitizeQuotedText(data.quadrant3),
-    quadrant4: sanitizeQuotedText(data.quadrant4),
+    quadrant1: sanitizeQuotedText(typeof data.quadrant1 === 'string' ? data.quadrant1 : ''),
+    quadrant2: sanitizeQuotedText(typeof data.quadrant2 === 'string' ? data.quadrant2 : ''),
+    quadrant3: sanitizeQuotedText(typeof data.quadrant3 === 'string' ? data.quadrant3 : ''),
+    quadrant4: sanitizeQuotedText(typeof data.quadrant4 === 'string' ? data.quadrant4 : ''),
     points,
     ...(classDefs.length > 0 ? { classDefs } : {}),
     config: {
@@ -317,7 +322,7 @@ export function generateQuadrantCode(data: QuadrantDiagramData): string {
     }
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(normalized)}`);
+  lines.push(formatGuiStateLine(normalized));
   return lines.join('\n');
 }
 
@@ -370,19 +375,9 @@ function parseStyleList(rawStyles: string): {
 export function parseQuadrantCodeToGuiData(code: string): QuadrantDiagramData {
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidQuadrantData(parsed)) {
-          return normalizeQuadrantData(parsed);
-        }
-      } catch {
-        // Fallback to raw syntax parser
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidQuadrantData);
+  if (restored) {
+    return normalizeQuadrantData(restored);
   }
 
   let title: string | undefined;

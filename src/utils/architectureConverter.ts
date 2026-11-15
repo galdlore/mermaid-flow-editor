@@ -7,8 +7,14 @@ import type {
   ArchitectureGroupData,
   ArchitectureNodeData,
 } from '../types/editor';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
-const GUI_STATE_PREFIX = '%% @gui-state:';
 const VALID_DIRS = new Set<ArchitectureDirection>(['L', 'R', 'T', 'B']);
 
 const OPPOSITE_DIR: Record<ArchitectureDirection, ArchitectureDirection> = {
@@ -212,12 +218,7 @@ function normalizeArchitectureData(
 
   const rawGroups: ArchitectureGroupData[] = data.groups.map((g, idx) => {
     const base = sanitizeArchId(g.id, `grp_${idx + 1}`);
-    let unique = base;
-    let suffix = 2;
-    while (usedIds.has(unique)) {
-      unique = `${base}_${suffix++}`;
-    }
-    usedIds.add(unique);
+    const unique = allocateUniqueId(base, usedIds);
     idMap.set(g.id, unique);
     return {
       id: unique,
@@ -239,12 +240,7 @@ function normalizeArchitectureData(
       n.id,
       n.type === 'junction' ? `junc_${idx + 1}` : `svc_${idx + 1}`
     );
-    let unique = base;
-    let suffix = 2;
-    while (usedIds.has(unique)) {
-      unique = `${base}_${suffix++}`;
-    }
-    usedIds.add(unique);
+    const unique = allocateUniqueId(base, usedIds);
     idMap.set(n.id, unique);
 
     const mappedGroup = n.groupId ? idMap.get(n.groupId) : undefined;
@@ -316,9 +312,13 @@ function normalizeArchitectureData(
   const alignments: ArchitectureAlignHintData[] = [];
   if (Array.isArray(data.alignments)) {
     data.alignments.forEach((hint, idx) => {
+      if (!hint || !Array.isArray(hint.members)) {
+        return;
+      }
       const members = Array.from(
         new Set(
           hint.members
+            .filter((m): m is string => typeof m === 'string')
             .map((m) => idMap.get(m) ?? m)
             .filter((m) => nodeMap.has(m))
         )
@@ -357,9 +357,12 @@ function normalizeArchitectureData(
     data.nodeSeparation <= 240
       ? Math.round(data.nodeSeparation)
       : undefined;
-  const comments = data.comments
-    ?.map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((line): line is string => typeof line === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((line) => line.length > 0)
+    : undefined;
 
   return {
     diagramType: 'architecture',
@@ -452,7 +455,7 @@ export function generateArchitectureCode(
     }
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(normalized)}`);
+  lines.push(formatGuiStateLine(normalized));
   return lines.join('\n');
 }
 
@@ -472,19 +475,9 @@ export function parseArchitectureCodeToGuiData(
 ): ArchitectureDiagramData {
   const lines = code.split(/\r?\n/);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidArchitectureData(parsed)) {
-          return normalizeArchitectureData(parsed);
-        }
-      } catch {
-        // Ignore broken gui-state and parse raw architecture text
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidArchitectureData);
+  if (restored) {
+    return normalizeArchitectureData(restored);
   }
 
   let title: string | undefined;

@@ -402,6 +402,243 @@ export interface QuadrantDiagramData {
   comments?: string[];
 }
 
+export type SequenceParticipantKind = 'participant' | 'actor';
+
+export interface SequenceBoxData {
+  id: string;
+  title: string;
+  color?: string;
+}
+
+export interface SequenceParticipantData {
+  id: string;
+  alias?: string;
+  kind: SequenceParticipantKind;
+  boxId?: string;
+}
+
+export type SequenceArrowType =
+  | '->>'
+  | '-->>'
+  | '->'
+  | '-->'
+  | '-x'
+  | '--x'
+  | '-)'
+  | '--)'
+  | '<<->>'
+  | '<<-->>';
+
+export type SequenceNotePlacement = 'right_of' | 'left_of' | 'over';
+
+export type SequenceBlockType =
+  | 'loop'
+  | 'alt'
+  | 'opt'
+  | 'par'
+  | 'critical'
+  | 'break'
+  | 'rect';
+
+export interface SequenceMessageStepData {
+  id: string;
+  kind: 'message';
+  from: string;
+  to: string;
+  arrowType: SequenceArrowType;
+  text: string;
+  activateTarget?: boolean;
+  deactivateSource?: boolean;
+}
+
+export interface SequenceNoteStepData {
+  id: string;
+  kind: 'note';
+  placement: SequenceNotePlacement;
+  participantId: string;
+  participantId2?: string;
+  text: string;
+}
+
+export interface SequenceBlockBranchData {
+  id: string;
+  label?: string;
+  steps: SequenceStepData[];
+}
+
+export interface SequenceBlockStepData {
+  id: string;
+  kind: 'block';
+  blockType: SequenceBlockType;
+  label: string;
+  color?: string;
+  branches: SequenceBlockBranchData[];
+}
+
+export type SequenceStepData =
+  | SequenceMessageStepData
+  | SequenceNoteStepData
+  | SequenceBlockStepData;
+
+export interface SequenceDiagramData {
+  diagramType: 'sequence';
+  title?: string;
+  autonumber?: boolean;
+  boxes?: SequenceBoxData[];
+  participants: SequenceParticipantData[];
+  steps: SequenceStepData[];
+  comments?: string[];
+}
+
+export type ErDiagramDirection = 'TB' | 'BT' | 'LR' | 'RL';
+
+export type ErAttributeKey = 'PK' | 'FK' | 'UK';
+
+export type ErCardinality =
+  | 'zero_or_one'
+  | 'exactly_one'
+  | 'zero_or_more'
+  | 'one_or_more';
+
+export interface ErAttributeData {
+  id: string;
+  type: string;
+  name: string;
+  keys?: ErAttributeKey[];
+  comment?: string;
+}
+
+export interface ErEntityData {
+  id: string;
+  alias?: string;
+  color?: string;
+  attributes: ErAttributeData[];
+}
+
+export interface ErRelationshipData {
+  id: string;
+  from: string;
+  to: string;
+  fromCardinality: ErCardinality;
+  toCardinality: ErCardinality;
+  identifying: boolean;
+  label: string;
+}
+
+export interface ErDiagramData {
+  diagramType: 'er';
+  title?: string;
+  direction?: ErDiagramDirection;
+  entities: ErEntityData[];
+  relationships: ErRelationshipData[];
+  comments?: string[];
+}
+
+export type ClassDiagramDirection = 'TB' | 'BT' | 'LR' | 'RL';
+
+export type ClassMemberVisibility = '+' | '-' | '#' | '~' | '';
+
+export type ClassMemberClassifier = 'none' | 'static' | 'abstract';
+
+export type ClassMemberKind = 'field' | 'method';
+
+export interface ClassMemberData {
+  id: string;
+  kind: ClassMemberKind;
+  visibility: ClassMemberVisibility;
+  name: string;
+  type?: string;
+  params?: string;
+  classifier?: ClassMemberClassifier;
+}
+
+export interface ClassNodeData {
+  id: string;
+  label?: string;
+  generic?: string;
+  stereotype?: string;
+  namespace?: string;
+  color?: string;
+  members: ClassMemberData[];
+}
+
+export type ClassRelationType =
+  | '--|>'
+  | '..|>'
+  | '*--'
+  | 'o--'
+  | '-->'
+  | '..>'
+  | '--'
+  | '..';
+
+export interface ClassRelationData {
+  id: string;
+  from: string;
+  to: string;
+  relationType: ClassRelationType;
+  fromCardinality?: string;
+  toCardinality?: string;
+  label?: string;
+}
+
+export interface ClassNoteData {
+  id: string;
+  targetClassId?: string;
+  text: string;
+}
+
+export interface ClassDiagramData {
+  diagramType: 'class';
+  title?: string;
+  direction?: ClassDiagramDirection;
+  classes: ClassNodeData[];
+  relations: ClassRelationData[];
+  notes?: ClassNoteData[];
+  comments?: string[];
+}
+
+export type StateDiagramDirection = 'TB' | 'BT' | 'LR' | 'RL';
+
+export type StateKind = 'normal' | 'composite' | 'choice' | 'fork' | 'join';
+
+export interface StateNodeData {
+  id: string;
+  label?: string;
+  description?: string;
+  kind: StateKind;
+  parentId?: string;
+  subDirection?: StateDiagramDirection;
+  color?: string;
+}
+
+export interface StateTransitionData {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  scopeId?: string;
+}
+
+export type StateNotePosition = 'left of' | 'right of';
+
+export interface StateNoteData {
+  id: string;
+  targetStateId: string;
+  position: StateNotePosition;
+  text: string;
+}
+
+export interface StateDiagramData {
+  diagramType: 'state';
+  title?: string;
+  direction?: StateDiagramDirection;
+  states: StateNodeData[];
+  transitions: StateTransitionData[];
+  notes?: StateNoteData[];
+  comments?: string[];
+}
+
 export interface FileOpenResult {
   canceled: boolean;
   filePath?: string;
@@ -417,6 +654,7 @@ export interface ElectronAPI {
   openFile: () => Promise<FileOpenResult>;
   saveFile: (filePath: string | null, content: string) => Promise<FileSaveResult>;
   saveFileAs: (content: string) => Promise<FileSaveResult>;
+  resetFileSession?: () => Promise<void>;
 }
 
 declare global {

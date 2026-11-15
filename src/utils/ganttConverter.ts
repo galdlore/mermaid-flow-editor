@@ -6,8 +6,14 @@ import type {
   GanttWeekday,
   GanttWeekend,
 } from '../types/editor';
+import { sanitizeSafeUrl } from './inputSafeguard';
+import {
+  GUI_STATE_PREFIX,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
-const GUI_STATE_PREFIX = '%% @gui-state:';
 const TASK_TAGS = new Set(['active', 'done', 'crit', 'milestone', 'vert']);
 const VALID_WEEKDAYS = new Set<string>([
   'monday',
@@ -84,11 +90,41 @@ export function isValidGanttData(value: unknown): value is GanttDiagramData {
     return false;
   }
   const obj = value as Partial<GanttDiagramData>;
-  return (
-    obj.diagramType === 'gantt' &&
-    Array.isArray(obj.sections) &&
-    Array.isArray(obj.tasks)
+  if (
+    obj.diagramType !== 'gantt' ||
+    !Array.isArray(obj.sections) ||
+    !Array.isArray(obj.tasks)
+  ) {
+    return false;
+  }
+  const sectionsValid = obj.sections.every(
+    (s) => Boolean(s) && typeof s === 'object' && typeof s.id === 'string' && typeof s.title === 'string'
   );
+  const tasksValid = obj.tasks.every(
+    (t) => Boolean(t) && typeof t === 'object' && typeof t.id === 'string' && typeof t.label === 'string'
+  );
+  return sectionsValid && tasksValid;
+}
+
+function sanitizeGanttHeaderField(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    return '';
+  }
+  return raw.replace(/[\r\n:#;]+/g, ' ').trim();
+}
+
+function sanitizeGanttTaskTokenField(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    return '';
+  }
+  return raw.replace(/[\r\n:#;,]+/g, ' ').trim();
+}
+
+function sanitizeTaskRefId(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    return '';
+  }
+  return raw.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 function sanitizeGanttText(raw: string): string {
@@ -101,6 +137,95 @@ function sanitizeGanttText(raw: string): string {
 function sanitizeTaskId(raw: string, fallbackIndex: number): string {
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '_');
   return cleaned || `t${fallbackIndex}`;
+}
+
+export function normalizeGanttData(data: GanttDiagramData): GanttDiagramData {
+  const title = typeof data.title === 'string' ? sanitizeGanttText(data.title) : '';
+  const dateFormat = sanitizeGanttHeaderField(data.dateFormat) || 'YYYY-MM-DD';
+  const axisFormat = sanitizeGanttHeaderField(data.axisFormat);
+  const tickInterval = sanitizeGanttHeaderField(data.tickInterval);
+  const excludes = sanitizeGanttHeaderField(data.excludes);
+  const includes = sanitizeGanttHeaderField(data.includes);
+  const todayMarker = sanitizeGanttHeaderField(data.todayMarker);
+  const weekday =
+    typeof data.weekday === 'string' && VALID_WEEKDAYS.has(data.weekday)
+      ? data.weekday
+      : undefined;
+  const weekend =
+    data.weekend === 'friday' || data.weekend === 'saturday'
+      ? data.weekend
+      : undefined;
+
+  const sections: GanttSectionData[] = data.sections.map((sec, idx) => ({
+    id: sanitizeTaskId(sec.id, idx + 1),
+    title: sanitizeGanttText(sec.title) || `Section ${idx + 1}`,
+  }));
+
+  const tasks: GanttTaskData[] = data.tasks.map((task, idx) => {
+    const status: GanttTaskStatus =
+      task.status === 'done' || task.status === 'active' ? task.status : 'normal';
+    const startMode: GanttTaskData['startMode'] =
+      task.startMode === 'date' || task.startMode === 'after' ? task.startMode : 'auto';
+    const endMode: GanttTaskData['endMode'] =
+      task.endMode === 'date' || task.endMode === 'until' ? task.endMode : 'duration';
+
+    const startDate = sanitizeGanttTaskTokenField(task.startDate);
+    const endDate = sanitizeGanttTaskTokenField(task.endDate);
+    const duration = sanitizeGanttTaskTokenField(task.duration);
+    const afterTaskIds = Array.isArray(task.afterTaskIds)
+      ? task.afterTaskIds.map(sanitizeTaskRefId).filter((id) => id.length > 0)
+      : undefined;
+    const untilTaskIds = Array.isArray(task.untilTaskIds)
+      ? task.untilTaskIds.map(sanitizeTaskRefId).filter((id) => id.length > 0)
+      : undefined;
+    const clickUrl = sanitizeSafeUrl(task.clickUrl);
+
+    return {
+      id: sanitizeTaskId(task.id, idx + 1),
+      label: sanitizeGanttText(task.label) || `Task ${idx + 1}`,
+      ...(typeof task.sectionId === 'string' && task.sectionId
+        ? { sectionId: sanitizeTaskId(task.sectionId, 1) }
+        : {}),
+      status,
+      ...(task.crit ? { crit: true } : {}),
+      ...(task.milestone ? { milestone: true } : {}),
+      ...(task.vert ? { vert: true } : {}),
+      startMode,
+      ...(startDate ? { startDate } : {}),
+      ...(afterTaskIds && afterTaskIds.length > 0 ? { afterTaskIds } : {}),
+      endMode,
+      ...(duration ? { duration } : {}),
+      ...(endDate ? { endDate } : {}),
+      ...(untilTaskIds && untilTaskIds.length > 0 ? { untilTaskIds } : {}),
+      ...(clickUrl ? { clickUrl } : {}),
+    };
+  });
+
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((c): c is string => typeof c === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((c) => c.length > 0)
+    : undefined;
+
+  return {
+    diagramType: 'gantt',
+    ...(title ? { title } : {}),
+    dateFormat,
+    ...(axisFormat ? { axisFormat } : {}),
+    ...(tickInterval ? { tickInterval } : {}),
+    ...(excludes ? { excludes } : {}),
+    ...(includes ? { includes } : {}),
+    ...(todayMarker ? { todayMarker } : {}),
+    ...(data.inclusiveEndDates ? { inclusiveEndDates: true } : {}),
+    ...(data.topAxis ? { topAxis: true } : {}),
+    ...(data.compactMode ? { compactMode: true } : {}),
+    ...(weekday ? { weekday } : {}),
+    ...(weekend ? { weekend } : {}),
+    sections,
+    tasks,
+    ...(comments && comments.length > 0 ? { comments } : {}),
+  };
 }
 
 function buildReferencedTaskIds(tasks: ReadonlyArray<GanttTaskData>): Set<string> {
@@ -165,7 +290,8 @@ function formatGanttTaskLine(
   return `${label} :${parts.join(', ')}`;
 }
 
-export function generateGanttCode(data: GanttDiagramData): string {
+export function generateGanttCode(rawData: GanttDiagramData): string {
+  const data = normalizeGanttData(rawData);
   const lines: string[] = [];
 
   if (data.compactMode || data.topAxis) {
@@ -254,7 +380,7 @@ export function generateGanttCode(data: GanttDiagramData): string {
   }
 
   for (const [idx, task] of orderedTasks.entries()) {
-    const url = task.clickUrl?.trim();
+    const url = sanitizeSafeUrl(task.clickUrl);
     if (url) {
       const id = sanitizeTaskId(task.id, idx + 1);
       const safeUrl = url.replace(/"/g, '%22');
@@ -262,7 +388,7 @@ export function generateGanttCode(data: GanttDiagramData): string {
     }
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(data)}`);
+  lines.push(formatGuiStateLine(data));
   return lines.join('\n');
 }
 
@@ -357,19 +483,9 @@ export function parseGanttCodeToGuiData(code: string): GanttDiagramData {
   const lines = code.split(/\r?\n/);
 
   // 1. %% @gui-state: からの完全復元を優先する
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidGanttData(parsed)) {
-          return parsed;
-        }
-      } catch {
-        // 解析失敗時はテキストパースにフォールバックする
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidGanttData);
+  if (restored) {
+    return normalizeGanttData(restored);
   }
 
   let compactMode = false;
@@ -523,7 +639,7 @@ export function parseGanttCodeToGuiData(code: string): GanttDiagramData {
     }
   }
 
-  return {
+  return normalizeGanttData({
     diagramType: 'gantt',
     ...(title ? { title } : {}),
     dateFormat: dateFormat || 'YYYY-MM-DD',
@@ -540,7 +656,7 @@ export function parseGanttCodeToGuiData(code: string): GanttDiagramData {
     sections,
     tasks,
     ...(comments.length > 0 ? { comments } : {}),
-  };
+  });
 }
 
 export interface ResolvedGanttTaskSpan {

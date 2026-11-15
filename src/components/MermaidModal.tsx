@@ -1,8 +1,10 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
-import { useI18n } from '../i18n';
+import { useI18n, type Language, type TranslationCatalog } from '../i18n';
 import type {
   ArchitectureDiagramData,
+  ClassDiagramData,
+  ErDiagramData,
   GanttDiagramData,
   KanbanDiagramData,
   MermaidDiagramData,
@@ -10,6 +12,8 @@ import type {
   MindmapDiagramData,
   PieDiagramData,
   QuadrantDiagramData,
+  SequenceDiagramData,
+  StateDiagramData,
   TreeViewDiagramData,
   XYChartDiagramData,
 } from '../types/editor';
@@ -60,6 +64,26 @@ import {
   generateQuadrantCode,
   parseQuadrantCodeToGuiData,
 } from '../utils/quadrantConverter';
+import {
+  createDefaultSequenceData,
+  generateSequenceCode,
+  parseSequenceCodeToGuiData,
+} from '../utils/sequenceConverter';
+import {
+  createDefaultErData,
+  generateErCode,
+  parseErCodeToGuiData,
+} from '../utils/erConverter';
+import {
+  createDefaultClassData,
+  generateClassCode,
+  parseClassCodeToGuiData,
+} from '../utils/classConverter';
+import {
+  createDefaultStateData,
+  generateStateCode,
+  parseStateCodeToGuiData,
+} from '../utils/stateConverter';
 import { renderMermaidSvg } from '../utils/mermaidRender';
 import MermaidCanvas from './MermaidCanvas';
 import MermaidInspector from './MermaidInspector';
@@ -79,6 +103,578 @@ import MindmapCanvas from './MindmapCanvas';
 import MindmapInspector from './MindmapInspector';
 import QuadrantCanvas from './QuadrantCanvas';
 import QuadrantInspector from './QuadrantInspector';
+import SequenceCanvas from './SequenceCanvas';
+import SequenceInspector from './SequenceInspector';
+import ErCanvas from './ErCanvas';
+import ErInspector from './ErInspector';
+import ClassCanvas from './ClassCanvas';
+import ClassInspector from './ClassInspector';
+import StateCanvas from './StateCanvas';
+import StateInspector from './StateInspector';
+
+interface DiagramStateMap {
+  flowchart: MermaidDiagramData;
+  treeView: TreeViewDiagramData;
+  gantt: GanttDiagramData;
+  kanban: KanbanDiagramData;
+  pie: PieDiagramData;
+  xychart: XYChartDiagramData;
+  architecture: ArchitectureDiagramData;
+  mindmap: MindmapDiagramData;
+  quadrantChart: QuadrantDiagramData;
+  sequence: SequenceDiagramData;
+  er: ErDiagramData;
+  class: ClassDiagramData;
+  state: StateDiagramData;
+}
+
+type DiagramStoreKey = keyof DiagramStateMap;
+type DiagramStateCache = Partial<{ [K in DiagramStoreKey]: DiagramStateMap[K] }>;
+type EditableDiagramType = DiagramStoreKey | 'swimlane';
+
+interface SelectionState {
+  nodeId: string | null;
+  edgeId: string | null;
+}
+
+interface WorkspaceRenderArgs<T> {
+  data: T;
+  selectedNodeId: string | null;
+  selectedEdgeId: string | null;
+  onChange: (next: T) => void;
+  onSelectNode: (id: string | null) => void;
+  onSelectEdge: (id: string | null) => void;
+}
+
+interface DiagramHandler<K extends DiagramStoreKey> {
+  storeKey: K;
+  getSubtitle: (t: TranslationCatalog) => string;
+  createDefault: (lang: Language) => DiagramStateMap[K];
+  parse: (code: string) => DiagramStateMap[K];
+  generate: (data: DiagramStateMap[K]) => string;
+  isEmpty: (data: DiagramStateMap[K]) => boolean;
+  getInitialSelection: (data: DiagramStateMap[K]) => SelectionState;
+  renderCanvas: (args: WorkspaceRenderArgs<DiagramStateMap[K]>) => ReactNode;
+  renderInspector: (args: WorkspaceRenderArgs<DiagramStateMap[K]>) => ReactNode;
+}
+
+type AnyDiagramData = DiagramStateMap[DiagramStoreKey];
+
+interface ErasedDiagramHandler {
+  storeKey: DiagramStoreKey;
+  getSubtitle: (t: TranslationCatalog) => string;
+  createDefault: (lang: Language) => AnyDiagramData;
+  parse: (code: string) => AnyDiagramData;
+  generate: (data: AnyDiagramData) => string;
+  isEmpty: (data: AnyDiagramData) => boolean;
+  getInitialSelection: (data: AnyDiagramData) => SelectionState;
+  renderCanvas: (args: WorkspaceRenderArgs<AnyDiagramData>) => ReactNode;
+  renderInspector: (args: WorkspaceRenderArgs<AnyDiagramData>) => ReactNode;
+}
+
+function defineDiagramHandler<K extends DiagramStoreKey>(
+  handler: DiagramHandler<K>
+): ErasedDiagramHandler {
+  return handler as unknown as ErasedDiagramHandler;
+}
+
+const DIAGRAM_HANDLERS: Record<EditableDiagramType, ErasedDiagramHandler> = {
+  flowchart: defineDiagramHandler<'flowchart'>({
+    storeKey: 'flowchart',
+    getSubtitle: (t) => t.modal.subtitle,
+    createDefault: createDefaultDiagramData,
+    parse: parseMermaidCodeToGuiData,
+    generate: generateMermaidCode,
+    isEmpty: (data) => data.nodes.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.nodes[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <MermaidCanvas
+        diagramData={data}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+        onSelectEdge={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <MermaidInspector
+        diagramData={data}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+        onSelectEdge={onSelectEdge}
+      />
+    ),
+  }),
+  swimlane: defineDiagramHandler<'flowchart'>({
+    storeKey: 'flowchart',
+    getSubtitle: (t) => t.modal.subtitleSwimlane,
+    createDefault: createDefaultSwimlaneData,
+    parse: (code) => ({ ...parseMermaidCodeToGuiData(code), diagramType: 'swimlane' as const }),
+    generate: generateMermaidCode,
+    isEmpty: (data) => data.nodes.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.nodes[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <MermaidCanvas
+        diagramData={data}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+        onSelectEdge={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <MermaidInspector
+        diagramData={data}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+        onSelectEdge={onSelectEdge}
+      />
+    ),
+  }),
+  treeView: defineDiagramHandler<'treeView'>({
+    storeKey: 'treeView',
+    getSubtitle: (t) => t.modal.subtitleTreeView,
+    createDefault: createDefaultTreeViewData,
+    parse: parseTreeViewCodeToGuiData,
+    generate: generateTreeViewCode,
+    isEmpty: (data) => data.nodes.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.nodes[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <TreeViewCanvas
+        treeData={data}
+        selectedNodeId={selectedNodeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <TreeViewInspector
+        treeData={data}
+        selectedNodeId={selectedNodeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+      />
+    ),
+  }),
+  gantt: defineDiagramHandler<'gantt'>({
+    storeKey: 'gantt',
+    getSubtitle: (t) => t.modal.subtitleGantt,
+    createDefault: createDefaultGanttData,
+    parse: parseGanttCodeToGuiData,
+    generate: generateGanttCode,
+    isEmpty: (data) => data.tasks.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.tasks[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <GanttCanvas
+        ganttData={data}
+        selectedTaskId={selectedNodeId}
+        onChange={onChange}
+        onSelectTask={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <GanttInspector
+        ganttData={data}
+        selectedTaskId={selectedNodeId}
+        onChange={onChange}
+        onSelectTask={onSelectNode}
+      />
+    ),
+  }),
+  kanban: defineDiagramHandler<'kanban'>({
+    storeKey: 'kanban',
+    getSubtitle: (t) => t.modal.subtitleKanban,
+    createDefault: createDefaultKanbanData,
+    parse: parseKanbanCodeToGuiData,
+    generate: generateKanbanCode,
+    isEmpty: (data) => data.columns.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.cards[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <KanbanCanvas
+        kanbanData={data}
+        selectedCardId={selectedNodeId}
+        onChange={onChange}
+        onSelectCard={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <KanbanInspector
+        kanbanData={data}
+        selectedCardId={selectedNodeId}
+        onChange={onChange}
+        onSelectCard={onSelectNode}
+      />
+    ),
+  }),
+  pie: defineDiagramHandler<'pie'>({
+    storeKey: 'pie',
+    getSubtitle: (t) => t.modal.subtitlePie,
+    createDefault: createDefaultPieData,
+    parse: parsePieCodeToGuiData,
+    generate: generatePieCode,
+    isEmpty: (data) => data.slices.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.slices[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <PieCanvas
+        pieData={data}
+        selectedSliceId={selectedNodeId}
+        onChange={onChange}
+        onSelectSlice={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <PieInspector
+        pieData={data}
+        selectedSliceId={selectedNodeId}
+        onChange={onChange}
+        onSelectSlice={onSelectNode}
+      />
+    ),
+  }),
+  xychart: defineDiagramHandler<'xychart'>({
+    storeKey: 'xychart',
+    getSubtitle: (t) => t.modal.subtitleXYChart,
+    createDefault: createDefaultXYChartData,
+    parse: parseXYChartCodeToGuiData,
+    generate: generateXYChartCode,
+    isEmpty: (data) => data.series.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.series[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <XYChartCanvas
+        xychartData={data}
+        selectedSeriesId={selectedNodeId}
+        onChange={onChange}
+        onSelectSeries={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <XYChartInspector
+        xychartData={data}
+        selectedSeriesId={selectedNodeId}
+        onChange={onChange}
+        onSelectSeries={onSelectNode}
+      />
+    ),
+  }),
+  architecture: defineDiagramHandler<'architecture'>({
+    storeKey: 'architecture',
+    getSubtitle: (t) => t.modal.subtitleArchitecture,
+    createDefault: createDefaultArchitectureData,
+    parse: parseArchitectureCodeToGuiData,
+    generate: generateArchitectureCode,
+    isEmpty: (data) => data.nodes.length === 0,
+    getInitialSelection: (data) => ({
+      nodeId: data.nodes[0]?.id ?? null,
+      edgeId: data.edges[0]?.id ?? null,
+    }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <ArchitectureCanvas
+        architectureData={data}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+        onSelectEdge={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <ArchitectureInspector
+        architectureData={data}
+        selectedNodeId={selectedNodeId}
+        selectedEdgeId={selectedEdgeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+        onSelectEdge={onSelectEdge}
+      />
+    ),
+  }),
+  mindmap: defineDiagramHandler<'mindmap'>({
+    storeKey: 'mindmap',
+    getSubtitle: (t) => t.modal.subtitleMindmap,
+    createDefault: createDefaultMindmapData,
+    parse: parseMindmapCodeToGuiData,
+    generate: generateMindmapCode,
+    isEmpty: (data) => data.nodes.length === 0,
+    getInitialSelection: (data) => ({ nodeId: data.nodes[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <MindmapCanvas
+        mindmapData={data}
+        selectedNodeId={selectedNodeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <MindmapInspector
+        mindmapData={data}
+        selectedNodeId={selectedNodeId}
+        onChange={onChange}
+        onSelectNode={onSelectNode}
+      />
+    ),
+  }),
+  quadrantChart: defineDiagramHandler<'quadrantChart'>({
+    storeKey: 'quadrantChart',
+    getSubtitle: (t) => t.modal.subtitleQuadrantChart,
+    createDefault: createDefaultQuadrantData,
+    parse: parseQuadrantCodeToGuiData,
+    generate: generateQuadrantCode,
+    isEmpty: () => false,
+    getInitialSelection: (data) => ({ nodeId: data.points[0]?.id ?? null, edgeId: null }),
+    renderCanvas: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <QuadrantCanvas
+        data={data}
+        selectedPointId={selectedNodeId}
+        onChange={onChange}
+        onSelectPoint={onSelectNode}
+      />
+    ),
+    renderInspector: ({ data, selectedNodeId, onChange, onSelectNode }) => (
+      <QuadrantInspector
+        data={data}
+        selectedPointId={selectedNodeId}
+        onChange={onChange}
+        onSelectPoint={onSelectNode}
+      />
+    ),
+  }),
+  sequence: defineDiagramHandler<'sequence'>({
+    storeKey: 'sequence',
+    getSubtitle: (t) => t.modal.subtitleSequence,
+    createDefault: createDefaultSequenceData,
+    parse: parseSequenceCodeToGuiData,
+    generate: generateSequenceCode,
+    isEmpty: (data) => data.participants.length === 0 && data.steps.length === 0,
+    getInitialSelection: (data) => ({
+      nodeId: data.steps[0]?.id ?? null,
+      edgeId: data.participants[0]?.id ?? null,
+    }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <SequenceCanvas
+        sequenceData={data}
+        selectedStepId={selectedNodeId}
+        selectedParticipantId={selectedEdgeId}
+        onChange={onChange}
+        onSelectStep={onSelectNode}
+        onSelectParticipant={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <SequenceInspector
+        sequenceData={data}
+        selectedStepId={selectedNodeId}
+        selectedParticipantId={selectedEdgeId}
+        onChange={onChange}
+        onSelectStep={onSelectNode}
+        onSelectParticipant={onSelectEdge}
+      />
+    ),
+  }),
+  er: defineDiagramHandler<'er'>({
+    storeKey: 'er',
+    getSubtitle: (t) => t.modal.subtitleEr,
+    createDefault: createDefaultErData,
+    parse: parseErCodeToGuiData,
+    generate: generateErCode,
+    isEmpty: (data) => data.entities.length === 0 && data.relationships.length === 0,
+    getInitialSelection: (data) => ({
+      nodeId: data.entities[0]?.id ?? null,
+      edgeId: data.relationships[0]?.id ?? null,
+    }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <ErCanvas
+        erData={data}
+        selectedEntityId={selectedNodeId}
+        selectedRelationshipId={selectedEdgeId}
+        onChange={onChange}
+        onSelectEntity={onSelectNode}
+        onSelectRelationship={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <ErInspector
+        erData={data}
+        selectedEntityId={selectedNodeId}
+        selectedRelationshipId={selectedEdgeId}
+        onChange={onChange}
+        onSelectEntity={onSelectNode}
+        onSelectRelationship={onSelectEdge}
+      />
+    ),
+  }),
+  class: defineDiagramHandler<'class'>({
+    storeKey: 'class',
+    getSubtitle: (t) => t.modal.subtitleClass,
+    createDefault: createDefaultClassData,
+    parse: parseClassCodeToGuiData,
+    generate: generateClassCode,
+    isEmpty: (data) => data.classes.length === 0 && data.relations.length === 0,
+    getInitialSelection: (data) => ({
+      nodeId: data.classes[0]?.id ?? null,
+      edgeId: data.relations[0]?.id ?? null,
+    }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <ClassCanvas
+        classData={data}
+        selectedClassId={selectedNodeId}
+        selectedRelationId={selectedEdgeId}
+        onChange={onChange}
+        onSelectClass={onSelectNode}
+        onSelectRelation={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <ClassInspector
+        classData={data}
+        selectedClassId={selectedNodeId}
+        selectedRelationId={selectedEdgeId}
+        onChange={onChange}
+        onSelectClass={onSelectNode}
+        onSelectRelation={onSelectEdge}
+      />
+    ),
+  }),
+  state: defineDiagramHandler<'state'>({
+    storeKey: 'state',
+    getSubtitle: (t) => t.modal.subtitleState,
+    createDefault: createDefaultStateData,
+    parse: parseStateCodeToGuiData,
+    generate: generateStateCode,
+    isEmpty: (data) => data.states.length === 0 && data.transitions.length === 0,
+    getInitialSelection: (data) => ({
+      nodeId: data.states[0]?.id ?? null,
+      edgeId: data.transitions[0]?.id ?? null,
+    }),
+    renderCanvas: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <StateCanvas
+        stateData={data}
+        selectedStateId={selectedNodeId}
+        selectedTransitionId={selectedEdgeId}
+        onChange={onChange}
+        onSelectState={onSelectNode}
+        onSelectTransition={onSelectEdge}
+      />
+    ),
+    renderInspector: ({
+      data,
+      selectedNodeId,
+      selectedEdgeId,
+      onChange,
+      onSelectNode,
+      onSelectEdge,
+    }) => (
+      <StateInspector
+        stateData={data}
+        selectedStateId={selectedNodeId}
+        selectedTransitionId={selectedEdgeId}
+        onChange={onChange}
+        onSelectState={onSelectNode}
+        onSelectTransition={onSelectEdge}
+      />
+    ),
+  }),
+};
+
+function isEditableDiagramType(type: MermaidDiagramType): type is EditableDiagramType {
+  return Object.prototype.hasOwnProperty.call(DIAGRAM_HANDLERS, type);
+}
 
 const DIAGRAM_TYPE_OPTIONS: ReadonlyArray<{
   id: MermaidDiagramType;
@@ -94,10 +690,10 @@ const DIAGRAM_TYPE_OPTIONS: ReadonlyArray<{
   { id: 'architecture', available: true },
   { id: 'mindmap', available: true },
   { id: 'quadrantChart', available: true },
-  { id: 'sequence', available: false },
-  { id: 'class', available: false },
-  { id: 'state', available: false },
-  { id: 'er', available: false },
+  { id: 'sequence', available: true },
+  { id: 'class', available: true },
+  { id: 'state', available: true },
+  { id: 'er', available: true },
 ];
 
 export interface MermaidModalProps {
@@ -115,37 +711,14 @@ export default function MermaidModal({
 }: MermaidModalProps) {
   const { lang, t } = useI18n();
   const reactId = useId();
-  const [diagramType, setDiagramType] = useState<MermaidDiagramType>('flowchart');
-  const [diagramData, setDiagramData] = useState<MermaidDiagramData>(() =>
-    createDefaultDiagramData(lang)
-  );
-  const [treeViewData, setTreeViewData] = useState<TreeViewDiagramData>(() =>
-    createDefaultTreeViewData(lang)
-  );
-  const [ganttData, setGanttData] = useState<GanttDiagramData>(() =>
-    createDefaultGanttData(lang)
-  );
-  const [kanbanData, setKanbanData] = useState<KanbanDiagramData>(() =>
-    createDefaultKanbanData(lang)
-  );
-  const [pieData, setPieData] = useState<PieDiagramData>(() =>
-    createDefaultPieData(lang)
-  );
-  const [xychartData, setXychartData] = useState<XYChartDiagramData>(() =>
-    createDefaultXYChartData(lang)
-  );
-  const [architectureData, setArchitectureData] = useState<ArchitectureDiagramData>(() =>
-    createDefaultArchitectureData(lang)
-  );
-  const [mindmapData, setMindmapData] = useState<MindmapDiagramData>(() =>
-    createDefaultMindmapData(lang)
-  );
-  const [quadrantData, setQuadrantData] = useState<QuadrantDiagramData>(() =>
-    createDefaultQuadrantData(lang)
-  );
+  const [diagramType, setDiagramType] = useState<EditableDiagramType>('flowchart');
+  const [diagramCache, setDiagramCache] = useState<DiagramStateCache>(() => ({
+    flowchart: createDefaultDiagramData(lang),
+  }));
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [bottomTab, setBottomTab] = useState<'preview' | 'code'>('preview');
+  const [mobileView, setMobileView] = useState<'canvas' | 'inspector' | 'preview' | 'code'>('canvas');
   const [previewSvg, setPreviewSvg] = useState<string>('');
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -157,370 +730,166 @@ export default function MermaidModal({
     const detectedType = initialCode.trim()
       ? detectMermaidDiagramType(initialCode)
       : 'flowchart';
-
-    if (detectedType === 'treeView') {
-      const parsedTree = parseTreeViewCodeToGuiData(initialCode);
-      setDiagramType('treeView');
-      setTreeViewData(parsedTree);
-      setGanttData(createDefaultGanttData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setPieData(createDefaultPieData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedTree.nodes[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'gantt') {
-      const parsedGantt = parseGanttCodeToGuiData(initialCode);
-      setDiagramType('gantt');
-      setGanttData(parsedGantt);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setPieData(createDefaultPieData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedGantt.tasks[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'kanban') {
-      const parsedKanban = parseKanbanCodeToGuiData(initialCode);
-      setDiagramType('kanban');
-      setKanbanData(parsedKanban);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setGanttData(createDefaultGanttData(lang));
-      setPieData(createDefaultPieData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedKanban.cards[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'pie') {
-      const parsedPie = parsePieCodeToGuiData(initialCode);
-      setDiagramType('pie');
-      setPieData(parsedPie);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setGanttData(createDefaultGanttData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedPie.slices[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'xychart') {
-      const parsedXY = parseXYChartCodeToGuiData(initialCode);
-      setDiagramType('xychart');
-      setXychartData(parsedXY);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setGanttData(createDefaultGanttData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setPieData(createDefaultPieData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedXY.series[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'architecture') {
-      const parsedArch = parseArchitectureCodeToGuiData(initialCode);
-      setDiagramType('architecture');
-      setArchitectureData(parsedArch);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setGanttData(createDefaultGanttData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setPieData(createDefaultPieData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedArch.nodes[0]?.id ?? null);
-      setSelectedEdgeId(parsedArch.edges[0]?.id ?? null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'mindmap') {
-      const parsedMindmap = parseMindmapCodeToGuiData(initialCode);
-      setDiagramType('mindmap');
-      setMindmapData(parsedMindmap);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setGanttData(createDefaultGanttData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setPieData(createDefaultPieData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setQuadrantData(createDefaultQuadrantData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedMindmap.nodes[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
-    if (detectedType === 'quadrantChart') {
-      const parsedQuadrant = parseQuadrantCodeToGuiData(initialCode);
-      setDiagramType('quadrantChart');
-      setQuadrantData(parsedQuadrant);
-      setTreeViewData(createDefaultTreeViewData(lang));
-      setGanttData(createDefaultGanttData(lang));
-      setKanbanData(createDefaultKanbanData(lang));
-      setPieData(createDefaultPieData(lang));
-      setXychartData(createDefaultXYChartData(lang));
-      setArchitectureData(createDefaultArchitectureData(lang));
-      setMindmapData(createDefaultMindmapData(lang));
-      setDiagramData(createDefaultDiagramData(lang));
-      setSelectedNodeId(parsedQuadrant.points[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      setBottomTab('preview');
-      return;
-    }
-
+    const nextType: EditableDiagramType = isEditableDiagramType(detectedType)
+      ? detectedType
+      : 'flowchart';
+    const handler = DIAGRAM_HANDLERS[nextType];
     const initialized = initialCode.trim()
-      ? parseMermaidCodeToGuiData(initialCode)
-      : detectedType === 'swimlane'
-        ? createDefaultSwimlaneData(lang)
-        : createDefaultDiagramData(lang);
+      ? handler.parse(initialCode)
+      : handler.createDefault(lang);
+    const selection = handler.getInitialSelection(initialized);
 
-    setDiagramType(detectedType);
-    setDiagramData(
-      detectedType === 'swimlane'
-        ? { ...initialized, diagramType: 'swimlane' }
-        : initialized
-    );
-    setTreeViewData(createDefaultTreeViewData(lang));
-    setGanttData(createDefaultGanttData(lang));
-    setKanbanData(createDefaultKanbanData(lang));
-    setPieData(createDefaultPieData(lang));
-    setXychartData(createDefaultXYChartData(lang));
-    setArchitectureData(createDefaultArchitectureData(lang));
-    setMindmapData(createDefaultMindmapData(lang));
-    setQuadrantData(createDefaultQuadrantData(lang));
-    setSelectedNodeId(initialized.nodes[0]?.id ?? null);
-    setSelectedEdgeId(null);
+    setDiagramType(nextType);
+    setDiagramCache({ [handler.storeKey]: initialized });
+    setSelectedNodeId(selection.nodeId);
+    setSelectedEdgeId(selection.edgeId);
     setBottomTab('preview');
+    setMobileView('canvas');
   }, [isOpen, initialCode, lang]);
 
-  const handleDiagramTypeChange = (nextType: MermaidDiagramType): void => {
-    if (nextType === diagramType) {
+  const handleDiagramTypeChange = (rawNextType: MermaidDiagramType): void => {
+    if (!isEditableDiagramType(rawNextType) || rawNextType === diagramType) {
       return;
     }
 
+    const nextType = rawNextType;
     const prevType = diagramType;
     setDiagramType(nextType);
 
-    if (nextType === 'treeView') {
-      setSelectedNodeId(treeViewData.nodes[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (nextType === 'gantt') {
-      setSelectedNodeId(ganttData.tasks[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (nextType === 'kanban') {
-      setSelectedNodeId(kanbanData.cards[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (nextType === 'pie') {
-      setSelectedNodeId(pieData.slices[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (nextType === 'xychart') {
-      setSelectedNodeId(xychartData.series[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (nextType === 'architecture') {
-      setSelectedNodeId(architectureData.nodes[0]?.id ?? null);
-      setSelectedEdgeId(architectureData.edges[0]?.id ?? null);
-      return;
-    }
-
-    if (nextType === 'mindmap') {
-      setSelectedNodeId(mindmapData.nodes[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (nextType === 'quadrantChart') {
-      setSelectedNodeId(quadrantData.points[0]?.id ?? null);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    if (
-      prevType === 'treeView' ||
-      prevType === 'gantt' ||
-      prevType === 'kanban' ||
-      prevType === 'pie' ||
-      prevType === 'xychart' ||
-      prevType === 'architecture' ||
-      prevType === 'mindmap' ||
-      prevType === 'quadrantChart'
-    ) {
-      if (nextType === 'swimlane') {
-        const nextSwimlane =
-          (diagramData.subgraphs?.length ?? 0) > 0
-            ? { ...diagramData, diagramType: 'swimlane' as const }
-            : createDefaultSwimlaneData(lang);
-        setDiagramData(nextSwimlane);
-        setSelectedNodeId(nextSwimlane.nodes[0]?.id ?? null);
-      } else {
-        setDiagramData({ ...diagramData, diagramType: 'flowchart' });
-        setSelectedNodeId(diagramData.nodes[0]?.id ?? null);
+    if (nextType !== 'flowchart' && nextType !== 'swimlane') {
+      const nextHandler = DIAGRAM_HANDLERS[nextType];
+      const existingData = diagramCache[nextHandler.storeKey];
+      const nextData = existingData ?? nextHandler.createDefault(lang);
+      if (!existingData) {
+        setDiagramCache((prev) => ({ ...prev, [nextHandler.storeKey]: nextData }));
       }
+      const selection = nextHandler.getInitialSelection(nextData);
+      setSelectedNodeId(selection.nodeId);
+      setSelectedEdgeId(selection.edgeId);
+      return;
+    }
+
+    const currentFlowData = diagramCache.flowchart;
+
+    if (prevType !== 'flowchart' && prevType !== 'swimlane') {
+      const baseData = currentFlowData ?? createDefaultDiagramData(lang);
+      const nextFlowData =
+        nextType === 'swimlane'
+          ? (baseData.subgraphs?.length ?? 0) > 0
+            ? { ...baseData, diagramType: 'swimlane' as const }
+            : createDefaultSwimlaneData(lang)
+          : { ...baseData, diagramType: 'flowchart' as const };
+
+      setDiagramCache((prev) => ({ ...prev, flowchart: nextFlowData }));
+      setSelectedNodeId(nextFlowData.nodes[0]?.id ?? null);
       setSelectedEdgeId(null);
       return;
     }
+
+    const activeFlowData =
+      currentFlowData ??
+      (prevType === 'swimlane'
+        ? createDefaultSwimlaneData(lang)
+        : createDefaultDiagramData(lang));
 
     if (nextType === 'swimlane') {
       const isUntouchedFlowchart =
         !initialCode.trim() &&
-        diagramData.nodes.length === 2 &&
-        diagramData.nodes[0]?.id === 'node_1' &&
-        diagramData.nodes[1]?.id === 'node_2' &&
-        (!diagramData.subgraphs || diagramData.subgraphs.length === 0);
+        activeFlowData.nodes.length === 2 &&
+        activeFlowData.nodes[0]?.id === 'node_1' &&
+        activeFlowData.nodes[1]?.id === 'node_2' &&
+        (!activeFlowData.subgraphs || activeFlowData.subgraphs.length === 0);
 
       if (isUntouchedFlowchart) {
         const nextSwimlane = createDefaultSwimlaneData(lang);
-        setDiagramData(nextSwimlane);
+        setDiagramCache((prev) => ({ ...prev, flowchart: nextSwimlane }));
         setSelectedNodeId(nextSwimlane.nodes[0]?.id ?? null);
         setSelectedEdgeId(null);
         return;
       }
 
-      const existingSubgraphs = diagramData.subgraphs ?? [];
+      const existingSubgraphs = activeFlowData.subgraphs ?? [];
       if (existingSubgraphs.length === 0) {
         const fallbackLaneId = 'lane_1';
-        setDiagramData({
-          ...diagramData,
-          diagramType: 'swimlane',
-          subgraphs: [
-            {
-              id: fallbackLaneId,
-              title: t.inspector.swimlane.defaultLaneTitle(1),
-              fill: '#eff6ff',
-              stroke: '#2563eb',
-            },
-          ],
-          nodes: diagramData.nodes.map((node) => ({
-            ...node,
-            subgraphId: node.subgraphId || fallbackLaneId,
-          })),
-        });
+        setDiagramCache((prev) => ({
+          ...prev,
+          flowchart: {
+            ...activeFlowData,
+            diagramType: 'swimlane',
+            subgraphs: [
+              {
+                id: fallbackLaneId,
+                title: t.inspector.swimlane.defaultLaneTitle(1),
+                fill: '#eff6ff',
+                stroke: '#2563eb',
+              },
+            ],
+            nodes: activeFlowData.nodes.map((node) => ({
+              ...node,
+              subgraphId: node.subgraphId || fallbackLaneId,
+            })),
+          },
+        }));
       } else {
-        setDiagramData({
-          ...diagramData,
-          diagramType: 'swimlane',
-        });
+        setDiagramCache((prev) => ({
+          ...prev,
+          flowchart: {
+            ...activeFlowData,
+            diagramType: 'swimlane',
+          },
+        }));
       }
       return;
     }
 
-    if (nextType === 'flowchart') {
-      const isUntouchedSwimlane =
-        !initialCode.trim() &&
-        diagramData.nodes.length === 3 &&
-        diagramData.nodes[2]?.id === 'node_3' &&
-        diagramData.subgraphs?.length === 2 &&
-        diagramData.subgraphs[0]?.id === 'lane_1';
+    const isUntouchedSwimlane =
+      !initialCode.trim() &&
+      activeFlowData.nodes.length === 3 &&
+      activeFlowData.nodes[2]?.id === 'node_3' &&
+      activeFlowData.subgraphs?.length === 2 &&
+      activeFlowData.subgraphs[0]?.id === 'lane_1';
 
-      if (isUntouchedSwimlane) {
-        const nextFlowchart = createDefaultDiagramData(lang);
-        setDiagramData(nextFlowchart);
-        setSelectedNodeId(nextFlowchart.nodes[0]?.id ?? null);
-        setSelectedEdgeId(null);
-        return;
-      }
-
-      setDiagramData({
-        ...diagramData,
-        diagramType: 'flowchart',
-      });
+    if (isUntouchedSwimlane) {
+      const nextFlowchart = createDefaultDiagramData(lang);
+      setDiagramCache((prev) => ({ ...prev, flowchart: nextFlowchart }));
+      setSelectedNodeId(nextFlowchart.nodes[0]?.id ?? null);
+      setSelectedEdgeId(null);
+      return;
     }
+
+    setDiagramCache((prev) => ({
+      ...prev,
+      flowchart: {
+        ...activeFlowData,
+        diagramType: 'flowchart',
+      },
+    }));
   };
 
-  const generatedCode = useMemo(() => {
-    if (diagramType === 'treeView') {
-      return generateTreeViewCode(treeViewData);
-    }
-    if (diagramType === 'gantt') {
-      return generateGanttCode(ganttData);
-    }
-    if (diagramType === 'kanban') {
-      return generateKanbanCode(kanbanData);
-    }
-    if (diagramType === 'pie') {
-      return generatePieCode(pieData);
-    }
-    if (diagramType === 'xychart') {
-      return generateXYChartCode(xychartData);
-    }
-    if (diagramType === 'architecture') {
-      return generateArchitectureCode(architectureData);
-    }
-    if (diagramType === 'mindmap') {
-      return generateMindmapCode(mindmapData);
-    }
-    if (diagramType === 'quadrantChart') {
-      return generateQuadrantCode(quadrantData);
-    }
-    return generateMermaidCode(diagramData);
-  }, [diagramType, treeViewData, ganttData, kanbanData, pieData, xychartData, architectureData, mindmapData, quadrantData, diagramData]);
+  const activeHandler = DIAGRAM_HANDLERS[diagramType];
+  const activeStoreKey = activeHandler.storeKey;
 
-  const isDiagramEmpty =
-    diagramType === 'treeView'
-      ? treeViewData.nodes.length === 0
-      : diagramType === 'gantt'
-        ? ganttData.tasks.length === 0
-        : diagramType === 'kanban'
-          ? kanbanData.columns.length === 0
-          : diagramType === 'pie'
-            ? pieData.slices.length === 0
-            : diagramType === 'xychart'
-              ? xychartData.series.length === 0
-              : diagramType === 'architecture'
-                ? architectureData.nodes.length === 0
-                : diagramType === 'mindmap'
-                  ? mindmapData.nodes.length === 0
-                  : diagramType === 'quadrantChart'
-                    ? false
-                    : diagramData.nodes.length === 0;
+  const activeData = useMemo(
+    () => diagramCache[activeStoreKey] ?? activeHandler.createDefault(lang),
+    [diagramCache, activeStoreKey, activeHandler, lang]
+  );
+
+  const handleActiveDataChange = useCallback(
+    (nextData: AnyDiagramData) => {
+      setDiagramCache((prev) => ({ ...prev, [activeStoreKey]: nextData }));
+    },
+    [activeStoreKey]
+  );
+
+  const generatedCode = useMemo(
+    () => activeHandler.generate(activeData),
+    [activeHandler, activeData]
+  );
+
+  const isDiagramEmpty = useMemo(
+    () => activeHandler.isEmpty(activeData),
+    [activeHandler, activeData]
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -557,33 +926,22 @@ export default function MermaidModal({
     return null;
   }
 
+  const workspaceArgs: WorkspaceRenderArgs<AnyDiagramData> = {
+    data: activeData,
+    selectedNodeId,
+    selectedEdgeId,
+    onChange: handleActiveDataChange,
+    onSelectNode: setSelectedNodeId,
+    onSelectEdge: setSelectedEdgeId,
+  };
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t.modal.ariaLabel}>
-      <div className="mermaid-modal">
+      <div className="mermaid-modal" data-mobile-view={mobileView}>
         <header className="modal-header">
           <div className="modal-title-group">
             <h2>{t.modal.title}</h2>
-            <span className="modal-subtitle">
-              {diagramType === 'treeView'
-                ? t.modal.subtitleTreeView
-                : diagramType === 'gantt'
-                  ? t.modal.subtitleGantt
-                  : diagramType === 'kanban'
-                    ? t.modal.subtitleKanban
-                    : diagramType === 'pie'
-                      ? t.modal.subtitlePie
-                      : diagramType === 'xychart'
-                        ? t.modal.subtitleXYChart
-                        : diagramType === 'architecture'
-                          ? t.modal.subtitleArchitecture
-                          : diagramType === 'mindmap'
-                            ? t.modal.subtitleMindmap
-                            : diagramType === 'quadrantChart'
-                              ? t.modal.subtitleQuadrantChart
-                              : diagramType === 'swimlane'
-                              ? t.modal.subtitleSwimlane
-                              : t.modal.subtitle}
-            </span>
+            <span className="modal-subtitle">{activeHandler.getSubtitle(t)}</span>
           </div>
           <div className="modal-header-actions">
             <label className="modal-diagram-type-select-group">
@@ -623,211 +981,59 @@ export default function MermaidModal({
           </div>
         </header>
 
-        {(diagramType === 'flowchart' || diagramType === 'swimlane') && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <MermaidCanvas
-                diagramData={diagramData}
-                selectedNodeId={selectedNodeId}
-                selectedEdgeId={selectedEdgeId}
-                onChange={setDiagramData}
-                onSelectNode={setSelectedNodeId}
-                onSelectEdge={setSelectedEdgeId}
-              />
-            </div>
+        <div className="modal-mobile-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileView === 'canvas'}
+            className={`modal-mobile-tab-btn ${mobileView === 'canvas' ? 'is-active' : ''}`}
+            onClick={() => setMobileView('canvas')}
+          >
+            {t.modal.mobileTabCanvas}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileView === 'inspector'}
+            className={`modal-mobile-tab-btn ${mobileView === 'inspector' ? 'is-active' : ''}`}
+            onClick={() => setMobileView('inspector')}
+          >
+            {t.modal.mobileTabInspector}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileView === 'preview'}
+            className={`modal-mobile-tab-btn ${mobileView === 'preview' ? 'is-active' : ''}`}
+            onClick={() => {
+              setMobileView('preview');
+              setBottomTab('preview');
+            }}
+          >
+            {t.modal.mobileTabPreview}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileView === 'code'}
+            className={`modal-mobile-tab-btn ${mobileView === 'code' ? 'is-active' : ''}`}
+            onClick={() => {
+              setMobileView('code');
+              setBottomTab('code');
+            }}
+          >
+            {t.modal.mobileTabCode}
+          </button>
+        </div>
 
-            <div className="modal-inspector-pane">
-              <MermaidInspector
-                diagramData={diagramData}
-                selectedNodeId={selectedNodeId}
-                selectedEdgeId={selectedEdgeId}
-                onChange={setDiagramData}
-                onSelectNode={setSelectedNodeId}
-                onSelectEdge={setSelectedEdgeId}
-              />
-            </div>
+        <div className="modal-workspace">
+          <div className="modal-canvas-pane">
+            {activeHandler.renderCanvas(workspaceArgs)}
           </div>
-        )}
-
-        {diagramType === 'treeView' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <TreeViewCanvas
-                treeData={treeViewData}
-                selectedNodeId={selectedNodeId}
-                onChange={setTreeViewData}
-                onSelectNode={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <TreeViewInspector
-                treeData={treeViewData}
-                selectedNodeId={selectedNodeId}
-                onChange={setTreeViewData}
-                onSelectNode={setSelectedNodeId}
-              />
-            </div>
+          <div className="modal-inspector-pane">
+            {activeHandler.renderInspector(workspaceArgs)}
           </div>
-        )}
-
-        {diagramType === 'gantt' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <GanttCanvas
-                ganttData={ganttData}
-                selectedTaskId={selectedNodeId}
-                onChange={setGanttData}
-                onSelectTask={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <GanttInspector
-                ganttData={ganttData}
-                selectedTaskId={selectedNodeId}
-                onChange={setGanttData}
-                onSelectTask={setSelectedNodeId}
-              />
-            </div>
-          </div>
-        )}
-
-        {diagramType === 'kanban' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <KanbanCanvas
-                kanbanData={kanbanData}
-                selectedCardId={selectedNodeId}
-                onChange={setKanbanData}
-                onSelectCard={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <KanbanInspector
-                kanbanData={kanbanData}
-                selectedCardId={selectedNodeId}
-                onChange={setKanbanData}
-                onSelectCard={setSelectedNodeId}
-              />
-            </div>
-          </div>
-        )}
-
-        {diagramType === 'pie' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <PieCanvas
-                pieData={pieData}
-                selectedSliceId={selectedNodeId}
-                onChange={setPieData}
-                onSelectSlice={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <PieInspector
-                pieData={pieData}
-                selectedSliceId={selectedNodeId}
-                onChange={setPieData}
-                onSelectSlice={setSelectedNodeId}
-              />
-            </div>
-          </div>
-        )}
-
-        {diagramType === 'xychart' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <XYChartCanvas
-                xychartData={xychartData}
-                selectedSeriesId={selectedNodeId}
-                onChange={setXychartData}
-                onSelectSeries={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <XYChartInspector
-                xychartData={xychartData}
-                selectedSeriesId={selectedNodeId}
-                onChange={setXychartData}
-                onSelectSeries={setSelectedNodeId}
-              />
-            </div>
-          </div>
-        )}
-
-        {diagramType === 'architecture' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <ArchitectureCanvas
-                architectureData={architectureData}
-                selectedNodeId={selectedNodeId}
-                selectedEdgeId={selectedEdgeId}
-                onChange={setArchitectureData}
-                onSelectNode={setSelectedNodeId}
-                onSelectEdge={setSelectedEdgeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <ArchitectureInspector
-                architectureData={architectureData}
-                selectedNodeId={selectedNodeId}
-                selectedEdgeId={selectedEdgeId}
-                onChange={setArchitectureData}
-                onSelectNode={setSelectedNodeId}
-                onSelectEdge={setSelectedEdgeId}
-              />
-            </div>
-          </div>
-        )}
-
-        {diagramType === 'mindmap' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <MindmapCanvas
-                mindmapData={mindmapData}
-                selectedNodeId={selectedNodeId}
-                onChange={setMindmapData}
-                onSelectNode={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <MindmapInspector
-                mindmapData={mindmapData}
-                selectedNodeId={selectedNodeId}
-                onChange={setMindmapData}
-                onSelectNode={setSelectedNodeId}
-              />
-            </div>
-          </div>
-        )}
-
-        {diagramType === 'quadrantChart' && (
-          <div className="modal-workspace">
-            <div className="modal-canvas-pane">
-              <QuadrantCanvas
-                data={quadrantData}
-                selectedPointId={selectedNodeId}
-                onChange={setQuadrantData}
-                onSelectPoint={setSelectedNodeId}
-              />
-            </div>
-
-            <div className="modal-inspector-pane">
-              <QuadrantInspector
-                data={quadrantData}
-                selectedPointId={selectedNodeId}
-                onChange={setQuadrantData}
-                onSelectPoint={setSelectedNodeId}
-              />
-            </div>
-          </div>
-        )}
+        </div>
 
         <footer className="modal-bottom-panel">
           <div className="modal-bottom-tabs">

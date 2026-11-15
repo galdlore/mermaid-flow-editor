@@ -5,8 +5,13 @@ import type {
   TreeViewNodeData,
   TreeViewNodeType,
 } from '../types/editor';
-
-const GUI_STATE_PREFIX = '%% @gui-state:';
+import {
+  GUI_STATE_PREFIX,
+  allocateUniqueId,
+  extractGuiStateJson,
+  formatGuiStateLine,
+  sanitizeSingleLineComment,
+} from './mermaidEnvelope';
 
 export const DEFAULT_TREE_VIEW_CONFIG: Readonly<TreeViewConfigData> = {
   showIcons: false,
@@ -68,16 +73,116 @@ export function createDefaultTreeViewData(lang: 'ja' | 'en' = 'ja'): TreeViewDia
   };
 }
 
+const MAX_TREE_DEPTH = 32;
+const VALID_TREE_ICONS = new Set<TreeViewIconOption>(['auto', 'folder', 'file', 'none']);
+
+function clampTreeInt(raw: unknown, fallback: number, min: number, max: number): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
 export function isValidTreeViewData(value: unknown): value is TreeViewDiagramData {
   if (!value || typeof value !== 'object') {
     return false;
   }
   const obj = value as Partial<TreeViewDiagramData>;
-  return (
-    obj.diagramType === 'treeView' &&
-    Boolean(obj.config && typeof obj.config === 'object') &&
-    Array.isArray(obj.nodes)
+  if (
+    obj.diagramType !== 'treeView' ||
+    !obj.config ||
+    typeof obj.config !== 'object' ||
+    !Array.isArray(obj.nodes)
+  ) {
+    return false;
+  }
+  return obj.nodes.every(
+    (node) =>
+      Boolean(node) &&
+      typeof node === 'object' &&
+      typeof node.id === 'string' &&
+      typeof node.name === 'string' &&
+      typeof node.depth === 'number'
   );
+}
+
+export function normalizeTreeViewData(data: TreeViewDiagramData): TreeViewDiagramData {
+  const rawConfig = data.config as Partial<TreeViewConfigData> | undefined;
+  const config: TreeViewConfigData = {
+    showIcons: Boolean(rawConfig?.showIcons),
+    rowIndent: clampTreeInt(
+      rawConfig?.rowIndent,
+      DEFAULT_TREE_VIEW_CONFIG.rowIndent,
+      0,
+      100
+    ),
+    lineThickness: clampTreeInt(
+      rawConfig?.lineThickness,
+      DEFAULT_TREE_VIEW_CONFIG.lineThickness,
+      1,
+      20
+    ),
+    paddingX: clampTreeInt(
+      rawConfig?.paddingX,
+      DEFAULT_TREE_VIEW_CONFIG.paddingX,
+      0,
+      100
+    ),
+    paddingY: clampTreeInt(
+      rawConfig?.paddingY,
+      DEFAULT_TREE_VIEW_CONFIG.paddingY,
+      0,
+      100
+    ),
+  };
+
+  const usedIds = new Set<string>();
+  const nodes: TreeViewNodeData[] = [];
+  for (let i = 0; i < data.nodes.length; i++) {
+    const raw = data.nodes[i];
+    const baseId =
+      raw.id && /^[a-zA-Z0-9_-]+$/.test(raw.id) ? raw.id : `tree_${i + 1}`;
+    const id = allocateUniqueId(baseId, usedIds);
+    const maxAllowedDepth =
+      i === 0 ? 0 : Math.min(MAX_TREE_DEPTH, nodes[i - 1].depth + 1);
+    const depth = clampTreeInt(raw.depth, 0, 0, maxAllowedDepth);
+    const name = sanitizeSingleLineComment(raw.name) || 'item';
+    const nodeType: TreeViewNodeType =
+      raw.nodeType === 'directory' ? 'directory' : 'file';
+    const description =
+      typeof raw.description === 'string'
+        ? sanitizeSingleLineComment(raw.description)
+        : '';
+    const icon =
+      raw.icon && VALID_TREE_ICONS.has(raw.icon) ? raw.icon : undefined;
+
+    nodes.push({
+      id,
+      depth,
+      name,
+      nodeType,
+      ...(description ? { description } : {}),
+      ...(raw.highlight ? { highlight: true } : {}),
+      ...(icon ? { icon } : {}),
+    });
+  }
+
+  const title =
+    typeof data.title === 'string' ? sanitizeSingleLineComment(data.title) : '';
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+        .filter((c): c is string => typeof c === 'string')
+        .map(sanitizeSingleLineComment)
+        .filter((c) => c.length > 0)
+    : undefined;
+
+  return {
+    diagramType: 'treeView',
+    ...(title ? { title } : {}),
+    config,
+    nodes,
+    ...(comments && comments.length > 0 ? { comments } : {}),
+  };
 }
 
 /**
@@ -119,7 +224,8 @@ function buildNonDefaultTreeConfig(
   return Object.keys(diff).length > 0 ? diff : null;
 }
 
-export function generateTreeViewCode(data: TreeViewDiagramData): string {
+export function generateTreeViewCode(rawData: TreeViewDiagramData): string {
+  const data = normalizeTreeViewData(rawData);
   const lines: string[] = [];
 
   const configDiff = buildNonDefaultTreeConfig(data.config);
@@ -134,7 +240,7 @@ export function generateTreeViewCode(data: TreeViewDiagramData): string {
   }
 
   for (const comment of data.comments ?? []) {
-    const cleanComment = comment.trim();
+    const cleanComment = sanitizeSingleLineComment(comment);
     if (cleanComment) {
       lines.push(`%% ${cleanComment}`);
     }
@@ -159,7 +265,7 @@ export function generateTreeViewCode(data: TreeViewDiagramData): string {
     lines.push(`${indent}${parts.join(' ')}`);
   }
 
-  lines.push(`${GUI_STATE_PREFIX} ${JSON.stringify(data)}`);
+  lines.push(formatGuiStateLine(data));
   return lines.join('\n');
 }
 
@@ -302,10 +408,16 @@ function applyInitTreeConfig(
   target: TreeViewConfigData
 ): void {
   try {
-    const normalized = rawJson
-      .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":')
-      .replace(/'/g, '"');
-    const parsed: unknown = JSON.parse(normalized);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      const normalized = rawJson.replace(
+        /([\{,]\s*)(['"]?)([a-zA-Z_][a-zA-Z0-9_]*)\2\s*:/g,
+        '$1"$3":'
+      );
+      parsed = JSON.parse(normalized);
+    }
     if (!parsed || typeof parsed !== 'object') {
       return;
     }
@@ -327,25 +439,9 @@ export function parseTreeViewCodeToGuiData(code: string): TreeViewDiagramData {
   const lines = code.split(/\r?\n/);
 
   // 1. %% @gui-state: からの完全復元を優先する
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (isValidTreeViewData(parsed)) {
-          return {
-            ...parsed,
-            config: {
-              ...DEFAULT_TREE_VIEW_CONFIG,
-              ...parsed.config,
-            },
-          };
-        }
-      } catch {
-        // 解析失敗時はテキストパースにフォールバックする
-      }
-    }
+  const restored = extractGuiStateJson(lines, isValidTreeViewData);
+  if (restored) {
+    return normalizeTreeViewData(restored);
   }
 
   const config: TreeViewConfigData = { ...DEFAULT_TREE_VIEW_CONFIG };
@@ -457,13 +553,13 @@ export function parseTreeViewCodeToGuiData(code: string): TreeViewDiagramData {
     });
   }
 
-  return {
+  return normalizeTreeViewData({
     diagramType: 'treeView',
     ...(title ? { title } : {}),
     config,
     nodes,
     ...(comments.length > 0 ? { comments } : {}),
-  };
+  });
 }
 
 /**
