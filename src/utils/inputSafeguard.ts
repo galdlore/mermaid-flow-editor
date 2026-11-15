@@ -25,6 +25,9 @@ export const FORBIDDEN_CLASS_MEMBER_CHARS_REGEX = /[;{}\r\n]/g;
 export const FORBIDDEN_STATE_ID_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
 export const FORBIDDEN_STATE_LABEL_CHARS_REGEX = /["\r\n]/g;
 export const FORBIDDEN_STATE_TEXT_CHARS_REGEX = /[;\r\n]/g;
+export const FORBIDDEN_C4_ID_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
+export const FORBIDDEN_C4_QUOTED_TEXT_CHARS_REGEX = /["\r\n]/g;
+export const FORBIDDEN_C4_TITLE_CHARS_REGEX = /[#;\r\n]/g;
 export const FORBIDDEN_URL_CHARS_REGEX = /["\s]/g;
 export const FORBIDDEN_CLASS_NAME_CHARS_REGEX = /[^a-zA-Z0-9_-]/g;
 

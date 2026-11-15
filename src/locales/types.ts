@@ -22,6 +22,11 @@ import type {
   ClassMemberKind,
   ClassMemberVisibility,
   ClassRelationType,
+  C4BoundaryKind,
+  C4DiagramSubtype,
+  C4ElementKind,
+  C4ElementVariant,
+  C4RelationType,
   PieLegendPosition,
   SequenceArrowType,
   SequenceBlockType,
@@ -122,6 +127,7 @@ export interface TranslationCatalog {
     subtitleEr: string;
     subtitleClass: string;
     subtitleState: string;
+    subtitleC4: string;
     diagramTypeLabel: string;
     diagramTypeComingSoon: string;
     diagramTypes: Record<MermaidDiagramType, string>;
@@ -861,6 +867,87 @@ export interface TranslationCatalog {
       defaultTransitionLabel: string;
       defaultNoteText: string;
     };
+    c4Diagram: {
+      elementSection: string;
+      boundarySection: string;
+      relationSection: string;
+      settingsSection: string;
+      commentsSection: string;
+      addElementBtn: string;
+      addBoundaryBtn: string;
+      addRelationBtn: string;
+      emptyElements: string;
+      emptyBoundaryChildren: string;
+      emptyRelations: string;
+      selectElementPrompt: string;
+      selectBoundaryPrompt: string;
+      selectRelationPrompt: string;
+      rootScopeLabel: string;
+      boundaryCountBadge: (count: number) => string;
+      elementIdField: string;
+      elementKindField: string;
+      elementKinds: Record<C4ElementKind, string>;
+      elementVariantField: string;
+      elementVariants: Record<C4ElementVariant, string>;
+      elementExternalField: string;
+      elementParentBoundaryField: string;
+      rootBoundaryOption: string;
+      elementLabelField: string;
+      elementLabelPlaceholder: string;
+      elementTechnField: string;
+      elementTechnPlaceholder: string;
+      elementDescrField: string;
+      elementDescrPlaceholder: string;
+      elementColorField: string;
+      noColorOption: string;
+      elementBorderColorField: string;
+      elementTextColorField: string;
+      defaultTextColorOption: string;
+      deleteElementBtn: string;
+      boundaryIdField: string;
+      boundaryKindField: string;
+      boundaryKinds: Record<C4BoundaryKind, string>;
+      boundaryParentField: string;
+      boundaryLabelField: string;
+      boundaryLabelPlaceholder: string;
+      boundaryTypeField: string;
+      boundaryTypePlaceholder: string;
+      boundaryDescrField: string;
+      boundaryDescrPlaceholder: string;
+      deleteBoundaryBtn: string;
+      relationsHeading: string;
+      relTypeField: string;
+      relationTypes: Record<C4RelationType, string>;
+      relIndexField: string;
+      relFromField: string;
+      relToField: string;
+      relLabelField: string;
+      relLabelPlaceholder: string;
+      relTechnField: string;
+      relTechnPlaceholder: string;
+      relDescrField: string;
+      relDescrPlaceholder: string;
+      relLineColorField: string;
+      relTextColorField: string;
+      swapEndpointsBtn: string;
+      deleteRelationBtn: string;
+      subtypeField: string;
+      subtypes: Record<C4DiagramSubtype, string>;
+      titleField: string;
+      titlePlaceholder: string;
+      shapeInRowField: string;
+      boundaryInRowField: string;
+      autoOption: string;
+      commentsField: string;
+      commentsPlaceholder: string;
+      moveLeftTitle: string;
+      moveRightTitle: string;
+      moveUpTitle: string;
+      moveDownTitle: string;
+      defaultElementLabel: (num: number) => string;
+      defaultBoundaryLabel: (num: number) => string;
+      defaultRelationLabel: string;
+    };
     safeguard: {
       syntaxErrorChars: (chars: string[]) => string;
       urlErrorChars: (chars: string[]) => string;
@@ -889,6 +976,9 @@ export interface TranslationCatalog {
       stateIdErrorChars: (chars: string[]) => string;
       stateLabelErrorChars: (chars: string[]) => string;
       stateTextErrorChars: (chars: string[]) => string;
+      c4IdErrorChars: (chars: string[]) => string;
+      c4QuotedTextErrorChars: (chars: string[]) => string;
+      c4TitleErrorChars: (chars: string[]) => string;
     };
   };
 }

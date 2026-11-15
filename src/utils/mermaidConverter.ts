@@ -251,6 +251,16 @@ export function detectMermaidDiagramType(code: string): MermaidDiagramType {
         ) {
           return 'state';
         }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as { diagramType?: unknown }).diagramType === 'c4' &&
+          Array.isArray((parsed as { elements?: unknown }).elements) &&
+          Array.isArray((parsed as { boundaries?: unknown }).boundaries) &&
+          Array.isArray((parsed as { relations?: unknown }).relations)
+        ) {
+          return 'c4';
+        }
         if (isValidDiagramData(parsed) && parsed.diagramType === 'swimlane') {
           return 'swimlane';
         }
@@ -310,6 +320,9 @@ export function detectMermaidDiagramType(code: string): MermaidDiagramType {
     }
     if (/^stateDiagram(?:-v2)?\b/i.test(trimmed)) {
       return 'state';
+    }
+    if (/^C4(?:Context|Container|Component|Dynamic|Deployment)\b/i.test(trimmed)) {
+      return 'c4';
     }
     if (/^swimlane-beta\b/i.test(trimmed)) {
       return 'swimlane';
