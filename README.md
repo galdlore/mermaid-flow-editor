@@ -1,6 +1,6 @@
 # Mermaid Flow Editor
 
-Windows 11向けのGUIベースMarkdownエディタ兼Mermaid図作成デスクトップアプリです。Markdownの文書作成からMermaidのフローチャート編集までを、すべてTypeScriptのみで構築された画面上で直感的に操作できます。
+Windows 11向けのGUIベースMarkdownエディタ兼Mermaid図作成デスクトップアプリです。Markdownの文書作成からMermaidのフローチャート編集までを、すべてTypeScriptのみで構築された画面上で直感的に操作できます。Chrome拡張機能版は[Chromeウェブストア](https://chromewebstore.google.com/detail/mermaid-flow-editor/acglgnfjffdmajcdkhcdgjpbdpfmgcek)から導入できます。
 
 ## 主な機能
 
@@ -54,7 +54,11 @@ npm run dist
 
 ## Chrome拡張機能としての導入手順
 
-Windows版のほかに、Chrome拡張機能版としてもビルドして利用できます。インストーラの申請が不要なため、利用中のブラウザへ手軽に組み込める構成です。
+公式の公開ページとして[Chromeウェブストア](https://chromewebstore.google.com/detail/mermaid-flow-editor/acglgnfjffdmajcdkhcdgjpbdpfmgcek)から直接インストールできます。追加したあとは、Chromeのツールバーにある拡張機能アイコンを押すと専用タブでエディタ画面が立ち上がります。
+
+### ローカルビルドからの手動導入
+
+開発中の変更を手元のブラウザで試す場合は、Chrome拡張機能パッケージをローカルでビルドして読み込むこともできます。
 
 ```bash
 # Chrome拡張機能パッケージの作成
@@ -62,6 +66,12 @@ npm run build:extension
 ```
 
 ストアへ提出するZIPファイルまで一括で作成したい場合は、ルートにある`extensionbuild.bat`を実行してください。処理が終わると直下に`manifest.json`を含む`mermaid-flow-editor-extension.zip`が出力されます。コマンドが成功すると、`dist-extension`フォルダへも必要なファイル一式が出力されます。次にChromeのアドレスバーへ`chrome://extensions`と入力して拡張機能管理画面を開いてください。画面右上のデベロッパーモードを有効にしたあと、「パッケージ化されていない拡張機能を読み込む」から`dist-extension`フォルダを選ぶと導入が完了します。ツールバーの拡張機能アイコンを押すと、専用タブでエディタ画面が立ち上がります。
+
+### バージョン管理とWindows版の自動リリース手順
+
+Windows版アプリとChrome拡張機能のバージョンは、プロジェクト直下の`package.json`で一元管理します。`chrome/build-extension.ts`はビルド時に`package.json`の`version`を自動で読み込みます。`npm run build:extension`または`extensionbuild.bat`を実行すると、最新の番号が反映された`dist-extension/manifest.json`と提出用ZIPファイルが出力されます。
+
+GitHub上での自動リリースは、バージョン差分検知方式を採用しています。`package.json`の`version`を新しい番号（例として`1.0.1`）へ書き換えて`main`ブランチへプッシュすると、`.github/workflows/release-windows.yml`が起動します。既存のタグに`v<バージョン>`が存在しない場合、GitHub Actions上でWindows用インストーラとChrome拡張機能ZIPをビルドし、タグ作成とGitHub Releaseへの公開まで自動で進みます。
 
 ## Docker（Raspberry Piサーバ対応）での起動手順
 

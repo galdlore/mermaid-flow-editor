@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 
@@ -6,6 +6,20 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const CHROME_DIST_DIR = path.join(ROOT_DIR, 'dist-chrome');
 const EXTENSION_OUT_DIR = path.join(ROOT_DIR, 'dist-extension');
+
+/**
+ * package.jsonのversionからChrome拡張機能マニフェスト準拠のバージョン番号を取得する。
+ */
+function resolveExtensionVersion(): string {
+  const pkgPath = path.join(ROOT_DIR, 'package.json');
+  const pkgRaw = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: unknown };
+  const rawVersion = typeof pkgRaw.version === 'string' ? pkgRaw.version.trim() : '';
+  const coreVersion = rawVersion.split(/[-+]/)[0] ?? '';
+  if (!/^\d+(?:\.\d+){0,3}$/.test(coreVersion)) {
+    throw new Error(`package.jsonのversionがChrome拡張の形式に適合しません: "${rawVersion}"`);
+  }
+  return coreVersion;
+}
 
 function createCrc32Table(): Uint32Array {
   const table = new Uint32Array(256);
@@ -165,10 +179,12 @@ function buildExtension(): void {
     );
   }
 
+  const extensionVersion = resolveExtensionVersion();
+
   const manifest = {
     manifest_version: 3,
     name: '__MSG_extName__',
-    version: '0.1.1',
+    version: extensionVersion,
     description: '__MSG_extDescription__',
     default_locale: 'en',
     action: {
