@@ -11,7 +11,7 @@
     "compile:chrome": "tsc -p tsconfig.chrome.json",
     "build": "tsc --noEmit && npm run compile:electron && vite build",
     "build:extension": "tsc --noEmit && vite build && npm run compile:chrome && node dist-chrome/build-extension.js",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder --publish never"
   },
   "dependencies": {
     "@xyflow/react": "^12.3.5",
