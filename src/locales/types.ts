@@ -48,6 +48,7 @@ export interface TranslationCatalog {
   app: {
     untitledFileName: string;
     confirmDiscard: (actionLabel: string) => string;
+    confirmCloseTab: (fileName: string) => string;
     actionNew: string;
     actionOpen: string;
     statusNewCreated: string;
@@ -56,7 +57,20 @@ export interface TranslationCatalog {
     statusSaved: (fileName: string) => string;
     statusSaveAs: (fileName: string) => string;
     statusSaveError: string;
+    statusDroppedOpened: (count: number, firstFileName: string) => string;
+    statusDroppedUnsupported: string;
+    statusDropError: string;
     closeBanner: string;
+  };
+  tabs: {
+    newTabTitle: string;
+    closeTabAria: (fileName: string) => string;
+    switcherAria: string;
+    sheetTitle: (count: number) => string;
+    addTabButton: string;
+    closeSheet: string;
+    dropOverlayTitle: string;
+    dropOverlayHint: string;
   };
   toolbar: {
     newTitle: string;
@@ -107,6 +121,8 @@ export interface TranslationCatalog {
     editorPaneHeader: string;
     editorPlaceholder: string;
     previewPaneHeader: string;
+    mobileEditLabel: string;
+    mobilePreviewLabel: string;
     tabSizeLabel: string;
     tabSpacesOption: (count: number) => string;
   };

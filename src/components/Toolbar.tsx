@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Bold,
   CheckSquare,
+  ChevronDown,
   Code,
   FileDown,
   FilePlus,
@@ -24,7 +25,10 @@ import { useI18n } from '../i18n';
 
 export interface ToolbarProps {
   fileName: string;
+  tabCount: number;
   isDirty: boolean;
+  switcherOpen: boolean;
+  onOpenTabSwitcher: () => void;
   onNewFile: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
@@ -59,7 +63,10 @@ function buildMarkdownTable(
 
 export default function Toolbar({
   fileName,
+  tabCount,
   isDirty,
+  switcherOpen,
+  onOpenTabSwitcher,
   onNewFile,
   onOpenFile,
   onSaveFile,
@@ -276,9 +283,19 @@ export default function Toolbar({
         </button>
       </div>
 
-      <div className="toolbar-file-status" title={fileName}>
-        <span className="file-name-text">{fileName}</span>
-        {isDirty && <span className="unsaved-badge">{t.toolbar.unsavedBadge}</span>}
+      <div className="toolbar-file-status">
+        <button
+          type="button"
+          className="toolbar-tab-switcher-btn"
+          onClick={onOpenTabSwitcher}
+          aria-expanded={switcherOpen}
+          title={`${fileName} (${t.tabs.switcherAria})`}
+        >
+          <span className="file-name-text">{fileName}</span>
+          {tabCount > 1 && <span className="tab-count-badge">{tabCount}</span>}
+          {isDirty && <span className="unsaved-badge">{t.toolbar.unsavedBadge}</span>}
+          <ChevronDown size={13} className="toolbar-tab-chevron" />
+        </button>
         <button
           type="button"
           className="toolbar-lang-btn"

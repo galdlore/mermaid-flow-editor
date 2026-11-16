@@ -5,15 +5,34 @@ export const jaCatalog: TranslationCatalog = {
     untitledFileName: '無題.md',
     confirmDiscard: (actionLabel) =>
       `未保存の変更があります。内容を破棄して${actionLabel}を続けますか？`,
+    confirmCloseTab: (fileName) =>
+      `「${fileName}」には未保存の変更があります。保存せずに閉じますか？`,
     actionNew: '新規作成',
     actionOpen: 'ファイルを開く操作',
-    statusNewCreated: '新しいドキュメントを作成しました。',
+    statusNewCreated: '新しいタブを作成しました。',
     statusOpened: (fileName) => `ファイルを開きました: ${fileName}`,
     statusOpenError: 'ファイルの読み込みに失敗しました。',
     statusSaved: (fileName) => `保存しました: ${fileName}`,
     statusSaveAs: (fileName) => `名前を付けて保存しました: ${fileName}`,
     statusSaveError: 'ファイルの保存に失敗しました。',
+    statusDroppedOpened: (count, firstFileName) =>
+      count <= 1
+        ? `ドロップされたファイルを開きました: ${firstFileName}`
+        : `${count}件のファイルを新しいタブで開きました`,
+    statusDroppedUnsupported:
+      '対応していないファイル形式です。.md / .markdown / .txt ファイルをドロップしてください。',
+    statusDropError: 'ドロップされたファイルの読み込みに失敗しました。',
     closeBanner: '閉じる',
+  },
+  tabs: {
+    newTabTitle: '新しいタブを追加',
+    closeTabAria: (fileName) => `${fileName} を閉じる`,
+    switcherAria: '開いているタブを切り替え',
+    sheetTitle: (count) => `開いているタブ (${count})`,
+    addTabButton: '新規タブ',
+    closeSheet: '閉じる',
+    dropOverlayTitle: 'ここにファイルをドロップして新しいタブで開く',
+    dropOverlayHint: '対応形式: .md / .markdown / .txt（複数ファイル対応）',
   },
   toolbar: {
     newTitle: '新規作成',
@@ -65,6 +84,8 @@ export const jaCatalog: TranslationCatalog = {
     editorPlaceholder:
       'ここにMarkdownを入力するか、上部のボタンから要素を挿入してください。',
     previewPaneHeader: 'リアルタイムプレビュー',
+    mobileEditLabel: '編集',
+    mobilePreviewLabel: 'プレビュー',
     tabSizeLabel: 'Tabインデント',
     tabSpacesOption: (count) => `${count}スペース`,
   },

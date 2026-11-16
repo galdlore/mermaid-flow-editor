@@ -5,15 +5,34 @@ export const enCatalog: TranslationCatalog = {
     untitledFileName: 'Untitled.md',
     confirmDiscard: (actionLabel) =>
       `You have unsaved changes. Discard them and continue to ${actionLabel}?`,
+    confirmCloseTab: (fileName) =>
+      `"${fileName}" has unsaved changes. Close this tab and discard them?`,
     actionNew: 'create a new document',
     actionOpen: 'open a file',
-    statusNewCreated: 'Created a new document.',
+    statusNewCreated: 'Created a new tab.',
     statusOpened: (fileName) => `Opened file: ${fileName}`,
     statusOpenError: 'Failed to open the file.',
     statusSaved: (fileName) => `Saved: ${fileName}`,
     statusSaveAs: (fileName) => `Saved as: ${fileName}`,
     statusSaveError: 'Failed to save the file.',
+    statusDroppedOpened: (count, firstFileName) =>
+      count <= 1
+        ? `Opened dropped file in a new tab: ${firstFileName}`
+        : `Opened ${count} files in new tabs`,
+    statusDroppedUnsupported:
+      'Unsupported file type. Please drop .md, .markdown, or .txt files.',
+    statusDropError: 'Failed to read the dropped file.',
     closeBanner: 'Close',
+  },
+  tabs: {
+    newTabTitle: 'New Tab',
+    closeTabAria: (fileName) => `Close ${fileName}`,
+    switcherAria: 'Switch open tabs',
+    sheetTitle: (count) => `Open Tabs (${count})`,
+    addTabButton: 'New Tab',
+    closeSheet: 'Close',
+    dropOverlayTitle: 'Drop files here to open in new tabs',
+    dropOverlayHint: 'Supported: .md, .markdown, .txt (multiple files supported)',
   },
   toolbar: {
     newTitle: 'New Document',
@@ -65,6 +84,8 @@ export const enCatalog: TranslationCatalog = {
     editorPlaceholder:
       'Type Markdown here, or use the toolbar buttons above to insert elements.',
     previewPaneHeader: 'Live Preview',
+    mobileEditLabel: 'Edit',
+    mobilePreviewLabel: 'Preview',
     tabSizeLabel: 'Tab Indent',
     tabSpacesOption: (count) => `${count} spaces`,
   },

@@ -1,14 +1,37 @@
 import type { FileOpenResult, FileSaveResult } from '../types/editor';
+import { isSupportedDroppedFileName } from './documentTabs';
 
 interface BrowserFileWritable {
   write: (data: string) => Promise<void>;
   close: () => Promise<void>;
 }
 
-interface BrowserFileHandle {
+export interface BrowserFileHandle {
+  kind?: string;
   name: string;
   getFile: () => Promise<File>;
   createWritable: () => Promise<BrowserFileWritable>;
+  queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'>;
+  requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'>;
+}
+
+interface DroppedDataTransferItem extends DataTransferItem {
+  getAsFileSystemHandle?: () => Promise<BrowserFileHandle | null>;
+}
+
+export interface BrowserFileOpenResult extends FileOpenResult {
+  handle?: BrowserFileHandle;
+}
+
+export interface DroppedMarkdownFile {
+  fileName: string;
+  content: string;
+  handle?: BrowserFileHandle;
+}
+
+export interface DroppedMarkdownReadResult {
+  files: DroppedMarkdownFile[];
+  ignoredCount: number;
 }
 
 interface FilePickerAcceptType {
@@ -43,7 +66,7 @@ const MARKDOWN_PICKER_TYPES: FilePickerAcceptType[] = [
   },
 ];
 
-let currentBrowserFileHandle: BrowserFileHandle | null = null;
+const browserFileHandles = new Map<string, BrowserFileHandle>();
 
 function isAbortError(err: unknown): boolean {
   return (
@@ -52,6 +75,20 @@ function isAbortError(err: unknown): boolean {
     'name' in err &&
     (err as { name: unknown }).name === 'AbortError'
   );
+}
+
+async function ensureWritePermission(handle: BrowserFileHandle): Promise<boolean> {
+  if (typeof handle.queryPermission === 'function') {
+    const status = await handle.queryPermission({ mode: 'readwrite' });
+    if (status === 'granted') {
+      return true;
+    }
+  }
+  if (typeof handle.requestPermission === 'function') {
+    const status = await handle.requestPermission({ mode: 'readwrite' });
+    return status === 'granted';
+  }
+  return true;
 }
 
 async function writeToBrowserHandle(
@@ -63,14 +100,14 @@ async function writeToBrowserHandle(
   await writable.close();
 }
 
-function openWithInputFallback(): Promise<FileOpenResult> {
+function openWithInputFallback(): Promise<BrowserFileOpenResult> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.md,.markdown,.txt';
 
     let resolved = false;
-    const finish = (result: FileOpenResult): void => {
+    const finish = (result: BrowserFileOpenResult): void => {
       if (resolved) {
         return;
       }
@@ -86,7 +123,6 @@ function openWithInputFallback(): Promise<FileOpenResult> {
         return;
       }
       const content = await file.text();
-      currentBrowserFileHandle = null;
       finish({ canceled: false, filePath: file.name, content });
     });
 
@@ -111,14 +147,117 @@ function downloadFallback(fileName: string, content: string): FileSaveResult {
   return { canceled: false, filePath: fileName };
 }
 
-/** 新規作成時にファイルハンドル保持状態とElectron側認可状態を初期化する */
-export function resetBrowserFileHandle(): void {
-  currentBrowserFileHandle = null;
+/** タブに紐づくブラウザファイルハンドルを登録または解除する */
+export function setBrowserFileHandle(
+  tabId: string,
+  handle: BrowserFileHandle | null | undefined
+): void {
+  if (handle) {
+    browserFileHandles.set(tabId, handle);
+  } else {
+    browserFileHandles.delete(tabId);
+  }
+}
+
+/** タブを閉じたとき等に保持中のファイルハンドルのみ解放する */
+export function releaseBrowserFileHandle(tabId: string): void {
+  browserFileHandles.delete(tabId);
+}
+
+/** 新規作成時や初期化時に特定タブ（または全体）のハンドル状態をリセットする */
+export function resetBrowserFileHandle(tabId?: string): void {
+  if (tabId) {
+    browserFileHandles.delete(tabId);
+    return;
+  }
+  browserFileHandles.clear();
   void window.electronAPI?.resetFileSession?.();
 }
 
+/** DragEventがテキスト選択ではなくファイルドロップかどうかを判定する */
+export function isFileDragEvent(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) {
+    return false;
+  }
+  return Array.from(dataTransfer.types).includes('Files');
+}
+
+/** ブラウザへドロップされたMarkdown/テキストファイルを読み込む */
+export async function readDroppedMarkdownFiles(
+  dataTransfer: DataTransfer
+): Promise<DroppedMarkdownReadResult> {
+  interface PendingEntry {
+    file: File | null;
+    handlePromise: Promise<BrowserFileHandle | null> | null;
+  }
+
+  // DataTransferItemListは非同期await後にクリアされるため同期的に収集する
+  const pendingEntries: PendingEntry[] = [];
+  if (dataTransfer.items && dataTransfer.items.length > 0) {
+    for (const rawItem of Array.from(dataTransfer.items)) {
+      if (rawItem.kind !== 'file') {
+        continue;
+      }
+      const item = rawItem as DroppedDataTransferItem;
+      const file = item.getAsFile();
+      const handlePromise =
+        typeof item.getAsFileSystemHandle === 'function'
+          ? item.getAsFileSystemHandle().catch(() => null)
+          : null;
+      pendingEntries.push({ file, handlePromise });
+    }
+  } else if (dataTransfer.files && dataTransfer.files.length > 0) {
+    for (const file of Array.from(dataTransfer.files)) {
+      pendingEntries.push({ file, handlePromise: null });
+    }
+  }
+
+  const files: DroppedMarkdownFile[] = [];
+  let ignoredCount = 0;
+
+  for (const entry of pendingEntries) {
+    const resolvedHandle = entry.handlePromise ? await entry.handlePromise : null;
+    if (resolvedHandle && resolvedHandle.kind && resolvedHandle.kind !== 'file') {
+      ignoredCount += 1;
+      continue;
+    }
+
+    let targetFile = entry.file;
+    let writableHandle: BrowserFileHandle | undefined;
+    if (resolvedHandle && typeof resolvedHandle.getFile === 'function') {
+      writableHandle = resolvedHandle;
+      if (!targetFile) {
+        try {
+          targetFile = await resolvedHandle.getFile();
+        } catch {
+          targetFile = null;
+        }
+      }
+    }
+
+    if (!targetFile) {
+      ignoredCount += 1;
+      continue;
+    }
+
+    if (!isSupportedDroppedFileName(targetFile.name, targetFile.type)) {
+      ignoredCount += 1;
+      continue;
+    }
+
+    const content = await targetFile.text();
+    files.push({
+      fileName: targetFile.name,
+      content,
+      handle: writableHandle,
+    });
+  }
+
+  return { files, ignoredCount };
+}
+
 /** 実行環境に応じてElectronダイアログまたはブラウザAPIでファイルを開く */
-export async function openMarkdownFile(): Promise<FileOpenResult> {
+export async function openMarkdownFile(): Promise<BrowserFileOpenResult> {
   if (window.electronAPI) {
     return window.electronAPI.openFile();
   }
@@ -139,8 +278,7 @@ export async function openMarkdownFile(): Promise<FileOpenResult> {
     }
     const file = await handle.getFile();
     const content = await file.text();
-    currentBrowserFileHandle = handle;
-    return { canceled: false, filePath: file.name, content };
+    return { canceled: false, filePath: file.name, content, handle };
   } catch (err) {
     if (isAbortError(err)) {
       return { canceled: true };
@@ -151,6 +289,7 @@ export async function openMarkdownFile(): Promise<FileOpenResult> {
 
 /** 実行環境に応じてElectronまたはブラウザAPIで別名保存を行う */
 export async function saveMarkdownFileAs(
+  tabId: string,
   content: string,
   suggestedName?: string | null
 ): Promise<FileSaveResult> {
@@ -170,7 +309,7 @@ export async function saveMarkdownFileAs(
       types: MARKDOWN_PICKER_TYPES,
     });
     await writeToBrowserHandle(handle, content);
-    currentBrowserFileHandle = handle;
+    browserFileHandles.set(tabId, handle);
     return { canceled: false, filePath: handle.name };
   } catch (err) {
     if (isAbortError(err)) {
@@ -180,8 +319,9 @@ export async function saveMarkdownFileAs(
   }
 }
 
-/** 実行環境に応じてElectronまたは保持中のハンドルへ上書き保存を行う */
+/** 実行環境に応じてElectronまたはタブに紐づくハンドルへ上書き保存を行う */
 export async function saveMarkdownFile(
+  tabId: string,
   currentFilePath: string | null,
   content: string
 ): Promise<FileSaveResult> {
@@ -189,10 +329,20 @@ export async function saveMarkdownFile(
     return window.electronAPI.saveFile(currentFilePath, content);
   }
 
-  if (currentBrowserFileHandle) {
-    await writeToBrowserHandle(currentBrowserFileHandle, content);
-    return { canceled: false, filePath: currentBrowserFileHandle.name };
+  const handle = browserFileHandles.get(tabId);
+  if (handle) {
+    try {
+      const allowed = await ensureWritePermission(handle);
+      if (allowed) {
+        await writeToBrowserHandle(handle, content);
+        return { canceled: false, filePath: handle.name };
+      }
+    } catch (err) {
+      if (isAbortError(err)) {
+        return { canceled: true };
+      }
+    }
   }
 
-  return saveMarkdownFileAs(content, currentFilePath);
+  return saveMarkdownFileAs(tabId, content, currentFilePath);
 }

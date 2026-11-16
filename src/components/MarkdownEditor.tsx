@@ -12,7 +12,7 @@ import {
 } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Pencil } from 'lucide-react';
+import { ChevronDown, FileText, Pencil } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { renderMermaidSvg } from '../utils/mermaidRender';
 import {
@@ -37,12 +37,17 @@ export interface MarkdownEditorHandle {
   insertAtCursor: (text: string) => void;
   wrapSelection: (prefix: string, suffix: string, placeholder: string) => void;
   insertLinePrefix: (prefix: string) => void;
+  activateEditMode: () => void;
 }
 
 export interface MarkdownEditorProps {
   value: string;
   onChange: (nextValue: string) => void;
   onEditMermaid: (blockIndex: number, code: string) => void;
+  activeTabTitle?: string;
+  tabCount?: number;
+  isDirty?: boolean;
+  onOpenTabSwitcher?: () => void;
 }
 
 interface MermaidPreviewBlockProps {
@@ -109,7 +114,18 @@ function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockPr
 }
 
 const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  function MarkdownEditor({ value, onChange, onEditMermaid }, ref) {
+  function MarkdownEditor(
+    {
+      value,
+      onChange,
+      onEditMermaid,
+      activeTabTitle,
+      tabCount = 1,
+      isDirty = false,
+      onOpenTabSwitcher,
+    },
+    ref
+  ) {
     const { t } = useI18n();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
@@ -183,6 +199,13 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
           const nextCursor = start + prefix.length;
           applyEdit(nextValue, nextCursor, nextCursor);
         },
+
+        activateEditMode() {
+          setMobilePane('edit');
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+          });
+        },
       }),
       [value, onChange]
     );
@@ -238,24 +261,43 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     return (
       <div className="editor-workspace-root">
         <div className="mobile-editor-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mobilePane === 'edit'}
-            className={`mobile-editor-tab-btn ${mobilePane === 'edit' ? 'is-active' : ''}`}
-            onClick={() => setMobilePane('edit')}
-          >
-            {t.editor.editorPaneHeader}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mobilePane === 'preview'}
-            className={`mobile-editor-tab-btn ${mobilePane === 'preview' ? 'is-active' : ''}`}
-            onClick={() => setMobilePane('preview')}
-          >
-            {t.editor.previewPaneHeader}
-          </button>
+          {onOpenTabSwitcher && (
+            <button
+              type="button"
+              className="mobile-tab-switcher-btn"
+              onClick={onOpenTabSwitcher}
+              title={activeTabTitle ?? t.tabs.switcherAria}
+              aria-label={t.tabs.switcherAria}
+            >
+              <FileText size={14} className="mobile-tab-switcher-icon" />
+              <span className="mobile-tab-switcher-title">
+                {activeTabTitle ?? t.app.untitledFileName}
+              </span>
+              {isDirty && <span className="doc-tab-dirty-dot" aria-hidden="true" />}
+              {tabCount > 1 && <span className="tab-count-badge">{tabCount}</span>}
+              <ChevronDown size={13} className="mobile-tab-switcher-chevron" />
+            </button>
+          )}
+          <div className="mobile-pane-switch-group">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobilePane === 'edit'}
+              className={`mobile-editor-tab-btn ${mobilePane === 'edit' ? 'is-active' : ''}`}
+              onClick={() => setMobilePane('edit')}
+            >
+              {t.editor.mobileEditLabel}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobilePane === 'preview'}
+              className={`mobile-editor-tab-btn ${mobilePane === 'preview' ? 'is-active' : ''}`}
+              onClick={() => setMobilePane('preview')}
+            >
+              {t.editor.mobilePreviewLabel}
+            </button>
+          </div>
         </div>
         <div className="editor-split-pane" data-mobile-active={mobilePane}>
         <section className="editor-pane-left">
