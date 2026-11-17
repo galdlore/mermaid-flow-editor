@@ -22,6 +22,7 @@ import {
   type TabSizeOption,
 } from '../utils/markdownTabIndent';
 import { extractMermaidBlocks } from '../utils/markdownMermaidBlocks';
+import { extractCleanPreviewHtml } from '../utils/htmlExport';
 import { readLocalStorage, writeLocalStorage } from '../utils/storage';
 
 const TAB_SIZE_STORAGE_KEY = 'mermaid-flow-editor:tab-size';
@@ -73,6 +74,7 @@ export interface MarkdownEditorHandle {
   wrapSelection: (prefix: string, suffix: string, placeholder: string) => void;
   insertLinePrefix: (prefix: string) => void;
   activateEditMode: () => void;
+  getExportablePreviewHtml: () => string;
 }
 
 export interface MarkdownEditorProps {
@@ -168,6 +170,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     const { t } = useI18n();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const wysiwygRef = useRef<WysiwygEditorHandle>(null);
+    const previewBodyRef = useRef<HTMLDivElement>(null);
     const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
     const [mobilePane, setMobilePane] = useState<'wysiwyg' | 'edit' | 'preview'>('wysiwyg');
     const prevEditorModeRef = useRef(editorMode);
@@ -377,6 +380,9 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             });
           }
         },
+        getExportablePreviewHtml() {
+          return extractCleanPreviewHtml(previewBodyRef.current);
+        },
       }),
       [value, onChange, editorMode, mobilePane, t]
     );
@@ -534,7 +540,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
         <section className="editor-pane-right">
           <div className="pane-header">{t.editor.previewPaneHeader}</div>
           <div className="markdown-preview-scroll">
-            <div className="markdown-preview-body">
+            <div ref={previewBodyRef} className="markdown-preview-body">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{

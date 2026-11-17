@@ -66,6 +66,15 @@ const MARKDOWN_PICKER_TYPES: FilePickerAcceptType[] = [
   },
 ];
 
+const HTML_PICKER_TYPES: FilePickerAcceptType[] = [
+  {
+    description: 'HTMLファイル',
+    accept: {
+      'text/html': ['.html', '.htm'],
+    },
+  },
+];
+
 const browserFileHandles = new Map<string, BrowserFileHandle>();
 
 function isAbortError(err: unknown): boolean {
@@ -134,8 +143,12 @@ function openWithInputFallback(): Promise<BrowserFileOpenResult> {
   });
 }
 
-function downloadFallback(fileName: string, content: string): FileSaveResult {
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+function downloadFallback(
+  fileName: string,
+  content: string,
+  mimeType = 'text/markdown;charset=utf-8'
+): FileSaveResult {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -345,4 +358,52 @@ export async function saveMarkdownFile(
   }
 
   return saveMarkdownFileAs(tabId, content, currentFilePath);
+}
+
+/** 実行環境に応じてElectronまたはブラウザAPIでHTMLファイルを保存する */
+export async function saveHtmlFile(
+  content: string,
+  suggestedName = 'document.html'
+): Promise<FileSaveResult> {
+  if (window.electronAPI?.saveHtmlFile) {
+    return window.electronAPI.saveHtmlFile(content, suggestedName);
+  }
+
+  const targetName = suggestedName || 'document.html';
+  const pickerWindow = window as unknown as PickerWindow;
+  if (typeof pickerWindow.showSaveFilePicker !== 'function') {
+    return downloadFallback(targetName, content, 'text/html;charset=utf-8');
+  }
+
+  try {
+    const handle = await pickerWindow.showSaveFilePicker({
+      suggestedName: targetName,
+      types: HTML_PICKER_TYPES,
+    });
+    await writeToBrowserHandle(handle, content);
+    return { canceled: false, filePath: handle.name };
+  } catch (err) {
+    if (isAbortError(err)) {
+      return { canceled: true };
+    }
+    throw err;
+  }
+}
+
+export type PdfExportResult =
+  | { mode: 'electron'; canceled: boolean; filePath?: string }
+  | { mode: 'print-dialog' };
+
+/** Electron版ではPDFファイルを直接保存し、ブラウザ版等では印刷ダイアログ経由を案内する */
+export async function savePdfFile(suggestedName = 'document.pdf'): Promise<PdfExportResult> {
+  if (window.electronAPI?.savePdfFile) {
+    const result = await window.electronAPI.savePdfFile(suggestedName);
+    return {
+      mode: 'electron',
+      canceled: result.canceled,
+      filePath: result.filePath,
+    };
+  }
+
+  return { mode: 'print-dialog' };
 }

@@ -15,6 +15,11 @@ export const enCatalog: TranslationCatalog = {
     statusSaved: (fileName) => `Saved: ${fileName}`,
     statusSaveAs: (fileName) => `Saved as: ${fileName}`,
     statusSaveError: 'Failed to save the file.',
+    statusExportedHtml: (fileName) => `Exported HTML: ${fileName}`,
+    statusExportHtmlError: 'Failed to export HTML.',
+    statusExportedPdf: (fileName) => `Exported PDF: ${fileName}`,
+    statusExportPdfPrintHint: 'Select "Save as PDF" as the destination in the print dialog.',
+    statusExportPdfError: 'Failed to export PDF.',
     statusDroppedOpened: (count, firstFileName) =>
       count <= 1
         ? `Opened dropped file in a new tab: ${firstFileName}`
@@ -43,6 +48,12 @@ export const enCatalog: TranslationCatalog = {
     saveLabel: 'Save',
     saveAsTitle: 'Save As (Ctrl+Shift+S)',
     saveAsLabel: 'Save As',
+    exportHtmlTitle: 'Export preview as an HTML file',
+    exportHtmlLabel: 'Export HTML',
+    exportPdfTitle: 'Export or save as a PDF file',
+    exportPdfLabel: 'Export PDF',
+    printTitle: 'Print or Save as PDF (Ctrl+P)',
+    printLabel: 'Print',
     h1Title: 'Heading 1 (H1)',
     h2Title: 'Heading 2 (H2)',
     h3Title: 'Heading 3 (H3)',

@@ -15,6 +15,11 @@ export const jaCatalog: TranslationCatalog = {
     statusSaved: (fileName) => `保存しました: ${fileName}`,
     statusSaveAs: (fileName) => `名前を付けて保存しました: ${fileName}`,
     statusSaveError: 'ファイルの保存に失敗しました。',
+    statusExportedHtml: (fileName) => `HTMLファイルを書き出しました: ${fileName}`,
+    statusExportHtmlError: 'HTMLファイルの書き出しに失敗しました。',
+    statusExportedPdf: (fileName) => `PDFファイルを書き出しました: ${fileName}`,
+    statusExportPdfPrintHint: '印刷ダイアログの送信先で「PDFに保存」を選択して保存してください。',
+    statusExportPdfError: 'PDFファイルの書き出しに失敗しました。',
     statusDroppedOpened: (count, firstFileName) =>
       count <= 1
         ? `ドロップされたファイルを開きました: ${firstFileName}`
@@ -43,6 +48,12 @@ export const jaCatalog: TranslationCatalog = {
     saveLabel: '保存',
     saveAsTitle: '名前を付けて保存 (Ctrl+Shift+S)',
     saveAsLabel: '別名保存',
+    exportHtmlTitle: 'プレビュー内容をHTMLファイルとして書き出す',
+    exportHtmlLabel: 'HTML出力',
+    exportPdfTitle: 'PDFとして保存する',
+    exportPdfLabel: 'PDF出力',
+    printTitle: '印刷またはPDFとして保存 (Ctrl+P)',
+    printLabel: '印刷',
     h1Title: '見出し1 (H1)',
     h2Title: '見出し2 (H2)',
     h3Title: '見出し3 (H3)',

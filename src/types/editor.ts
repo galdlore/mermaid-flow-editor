@@ -731,6 +731,8 @@ export interface ElectronAPI {
   openFile: () => Promise<FileOpenResult>;
   saveFile: (filePath: string | null, content: string) => Promise<FileSaveResult>;
   saveFileAs: (content: string) => Promise<FileSaveResult>;
+  saveHtmlFile?: (content: string, suggestedName?: string) => Promise<FileSaveResult>;
+  savePdfFile?: (suggestedName?: string) => Promise<FileSaveResult>;
   resetFileSession?: () => Promise<void>;
 }
 

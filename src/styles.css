@@ -939,6 +939,15 @@ body,
   color: var(--text-secondary);
 }
 
+.markdown-preview-body ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.4em;
+}
+
+.markdown-preview-body li.task-list-item input[type="checkbox"] {
+  margin-right: 6px;
+}
+
 .markdown-code-pre {
   padding: 12px 14px;
   background-color: #f8fafc;
@@ -5701,5 +5710,106 @@ body,
   .mermaid-handle {
     width: 14px;
     height: 14px;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    background-color: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .toolbar,
+  .doc-tabbar,
+  .status-banner,
+  .mobile-editor-tabs,
+  .drop-overlay,
+  .tab-switcher-backdrop,
+  .modal-backdrop,
+  .editor-pane-right .pane-header,
+  .mermaid-edit-float-btn,
+  .editor-split-pane .editor-pane-left,
+  .editor-split-pane .editor-pane-wysiwyg,
+  .editor-split-pane[data-editor-mode] .editor-pane-left,
+  .editor-split-pane[data-editor-mode] .editor-pane-wysiwyg,
+  .editor-split-pane[data-mobile-active] .editor-pane-left,
+  .editor-split-pane[data-mobile-active] .editor-pane-wysiwyg {
+    display: none;
+  }
+
+  .app-shell,
+  .app-main,
+  .editor-workspace-root,
+  .editor-split-pane,
+  .editor-split-pane[data-editor-mode],
+  .editor-split-pane[data-mobile-active] {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+  }
+
+  .editor-split-pane .editor-pane-right,
+  .editor-split-pane[data-editor-mode] .editor-pane-right,
+  .editor-split-pane[data-mobile-active] .editor-pane-right {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: #ffffff;
+  }
+
+  .markdown-preview-scroll {
+    height: auto;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .markdown-preview-body {
+    overflow-wrap: anywhere;
+  }
+
+  .markdown-preview-body h1,
+  .markdown-preview-body h2,
+  .markdown-preview-body h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .markdown-preview-body table,
+  .markdown-preview-body blockquote,
+  .markdown-code-pre,
+  .mermaid-preview-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .markdown-code-pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: visible;
+  }
+
+  .mermaid-preview-card {
+    padding: 14px 16px;
+    overflow: visible;
   }
 }

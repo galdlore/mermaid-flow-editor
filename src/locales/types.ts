@@ -57,6 +57,11 @@ export interface TranslationCatalog {
     statusSaved: (fileName: string) => string;
     statusSaveAs: (fileName: string) => string;
     statusSaveError: string;
+    statusExportedHtml: (fileName: string) => string;
+    statusExportHtmlError: string;
+    statusExportedPdf: (fileName: string) => string;
+    statusExportPdfPrintHint: string;
+    statusExportPdfError: string;
     statusDroppedOpened: (count: number, firstFileName: string) => string;
     statusDroppedUnsupported: string;
     statusDropError: string;
@@ -81,6 +86,12 @@ export interface TranslationCatalog {
     saveLabel: string;
     saveAsTitle: string;
     saveAsLabel: string;
+    exportHtmlTitle: string;
+    exportHtmlLabel: string;
+    exportPdfTitle: string;
+    exportPdfLabel: string;
+    printTitle: string;
+    printLabel: string;
     h1Title: string;
     h2Title: string;
     h3Title: string;

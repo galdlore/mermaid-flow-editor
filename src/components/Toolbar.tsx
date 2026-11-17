@@ -5,7 +5,9 @@ import {
   ChevronDown,
   Code,
   Columns2,
+  FileCode2,
   FileDown,
+  FileOutput,
   FilePlus,
   FolderOpen,
   GitBranch,
@@ -18,6 +20,7 @@ import {
   List,
   ListOrdered,
   PenLine,
+  Printer,
   Quote,
   Save,
   Strikethrough,
@@ -37,6 +40,9 @@ export interface ToolbarProps {
   onOpenFile: () => void;
   onSaveFile: () => void;
   onSaveFileAs: () => void;
+  onExportHtml: () => void;
+  onExportPdf: () => void;
+  onPrint: () => void;
   onHeading: (level: 1 | 2 | 3) => void;
   onBold: () => void;
   onItalic: () => void;
@@ -63,6 +69,9 @@ export default function Toolbar({
   onOpenFile,
   onSaveFile,
   onSaveFileAs,
+  onExportHtml,
+  onExportPdf,
+  onPrint,
   onHeading,
   onBold,
   onItalic,
@@ -108,6 +117,23 @@ export default function Toolbar({
         <button type="button" className="toolbar-btn" onClick={onSaveFileAs} title={t.toolbar.saveAsTitle}>
           <FileDown size={16} />
           <span>{t.toolbar.saveAsLabel}</span>
+        </button>
+      </div>
+
+      <div className="toolbar-divider" />
+
+      <div className="toolbar-group">
+        <button type="button" className="toolbar-btn" onClick={onExportHtml} title={t.toolbar.exportHtmlTitle}>
+          <FileCode2 size={16} />
+          <span>{t.toolbar.exportHtmlLabel}</span>
+        </button>
+        <button type="button" className="toolbar-btn" onClick={onExportPdf} title={t.toolbar.exportPdfTitle}>
+          <FileOutput size={16} />
+          <span>{t.toolbar.exportPdfLabel}</span>
+        </button>
+        <button type="button" className="toolbar-btn" onClick={onPrint} title={t.toolbar.printTitle}>
+          <Printer size={16} />
+          <span>{t.toolbar.printLabel}</span>
         </button>
       </div>
 

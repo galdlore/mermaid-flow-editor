@@ -26,10 +26,18 @@ import {
   openMarkdownFile,
   readDroppedMarkdownFiles,
   releaseBrowserFileHandle,
+  saveHtmlFile,
   saveMarkdownFile,
   saveMarkdownFileAs,
+  savePdfFile,
   setBrowserFileHandle,
 } from './utils/fileAdapter';
+import {
+  buildExportDocumentTitle,
+  buildExportHtmlDocument,
+  buildHtmlFileName,
+  buildPdfFileName,
+} from './utils/htmlExport';
 import { replaceMermaidBlock } from './utils/markdownMermaidBlocks';
 import { isElectronEnv, readLocalStorage, writeLocalStorage } from './utils/storage';
 
@@ -324,6 +332,59 @@ export default function App() {
     }
   }, [activeTab, t]);
 
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  const handleExportHtml = useCallback(async () => {
+    try {
+      const bodyHtml = editorRef.current?.getExportablePreviewHtml() ?? '';
+      const documentTitle = buildExportDocumentTitle(activeTab.filePath, activeDisplayTitle);
+      const suggestedFileName = buildHtmlFileName(activeTab.filePath, activeDisplayTitle);
+      const htmlDocument = buildExportHtmlDocument({
+        title: documentTitle,
+        lang,
+        bodyHtml,
+      });
+
+      const result = await saveHtmlFile(htmlDocument, suggestedFileName);
+      if (!result.canceled && result.filePath) {
+        setStatusMessage(
+          t.app.statusExportedHtml(
+            getTabBaseFileName(result.filePath, suggestedFileName)
+          )
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t.app.statusExportHtmlError;
+      setStatusMessage(msg);
+    }
+  }, [activeDisplayTitle, activeTab.filePath, lang, t]);
+
+  const handleExportPdf = useCallback(async () => {
+    try {
+      const suggestedFileName = buildPdfFileName(activeTab.filePath, activeDisplayTitle);
+      const result = await savePdfFile(suggestedFileName);
+      if (result.mode === 'print-dialog') {
+        setStatusMessage(t.app.statusExportPdfPrintHint);
+        requestAnimationFrame(() => {
+          window.print();
+        });
+        return;
+      }
+      if (!result.canceled && result.filePath) {
+        setStatusMessage(
+          t.app.statusExportedPdf(
+            getTabBaseFileName(result.filePath, suggestedFileName)
+          )
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t.app.statusExportPdfError;
+      setStatusMessage(msg);
+    }
+  }, [activeDisplayTitle, activeTab.filePath, t]);
+
   useEffect(() => {
     const hasAnyDirty = tabs.some((tab) => tab.isDirty);
     const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -364,6 +425,9 @@ export default function App() {
       } else if (key === 'o') {
         event.preventDefault();
         void handleOpenFile();
+      } else if (key === 'p' && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        handlePrint();
       }
     };
 
@@ -371,7 +435,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [mermaidModalOpen, handleOpenFile, handleSaveFile, handleSaveFileAs]);
+  }, [mermaidModalOpen, handleOpenFile, handlePrint, handleSaveFile, handleSaveFileAs]);
 
   useEffect(() => {
     const resetDragState = (): void => {
@@ -530,6 +594,9 @@ export default function App() {
         onOpenFile={() => void handleOpenFile()}
         onSaveFile={() => void handleSaveFile()}
         onSaveFileAs={() => void handleSaveFileAs()}
+        onExportHtml={() => void handleExportHtml()}
+        onExportPdf={() => void handleExportPdf()}
+        onPrint={handlePrint}
         onHeading={(level) => editorRef.current?.applyHeading(level)}
         onBold={() => editorRef.current?.applyBold()}
         onItalic={() => editorRef.current?.applyItalic()}

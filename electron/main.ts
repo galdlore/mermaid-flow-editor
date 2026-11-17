@@ -23,6 +23,16 @@ const MARKDOWN_FILTERS: FileFilter[] = [
   { name: 'すべてのファイル', extensions: ['*'] },
 ];
 
+const HTML_FILTERS: FileFilter[] = [
+  { name: 'HTML', extensions: ['html', 'htm'] },
+  { name: 'すべてのファイル', extensions: ['*'] },
+];
+
+const PDF_FILTERS: FileFilter[] = [
+  { name: 'PDF', extensions: ['pdf'] },
+  { name: 'すべてのファイル', extensions: ['*'] },
+];
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -108,6 +118,65 @@ async function saveWithDialog(content: string): Promise<{ canceled: boolean; fil
   return { canceled: false, filePath: resolvedPath };
 }
 
+function resolveSafeDefaultFileName(suggestedName: unknown, fallbackName: string): string {
+  if (typeof suggestedName !== 'string') {
+    return fallbackName;
+  }
+  const baseName = path.basename(suggestedName).trim();
+  return baseName || fallbackName;
+}
+
+async function saveHtmlWithDialog(
+  content: string,
+  suggestedName?: string
+): Promise<{ canceled: boolean; filePath?: string }> {
+  const options = {
+    title: 'HTMLファイルとして保存',
+    defaultPath: resolveSafeDefaultFileName(suggestedName, 'document.html'),
+    filters: HTML_FILTERS,
+  };
+
+  const result = mainWindow
+    ? await dialog.showSaveDialog(mainWindow, options)
+    : await dialog.showSaveDialog(options);
+
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  const resolvedPath = normalizeAuthorizedPath(result.filePath);
+  await writeFile(resolvedPath, content, 'utf-8');
+  return { canceled: false, filePath: resolvedPath };
+}
+
+async function savePdfWithDialog(
+  suggestedName?: string
+): Promise<{ canceled: boolean; filePath?: string }> {
+  if (!mainWindow) {
+    throw new Error('Main window is not available for PDF export.');
+  }
+
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'PDFファイルとして保存',
+    defaultPath: resolveSafeDefaultFileName(suggestedName, 'document.pdf'),
+    filters: PDF_FILTERS,
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  const pdfBuffer = await mainWindow.webContents.printToPDF({
+    printBackground: true,
+    pageSize: 'A4',
+    preferCSSPageSize: true,
+  });
+
+  const resolvedPath = normalizeAuthorizedPath(result.filePath);
+  await writeFile(resolvedPath, pdfBuffer);
+  return { canceled: false, filePath: resolvedPath };
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle('file:open', async () => {
     const options = {
@@ -153,6 +222,25 @@ function registerIpcHandlers(): void {
       throw new Error('Invalid file content.');
     }
     return saveWithDialog(content);
+  });
+
+  ipcMain.handle(
+    'file:saveHtml',
+    async (_event, content: unknown, suggestedName: unknown) => {
+      if (typeof content !== 'string') {
+        throw new Error('Invalid HTML content.');
+      }
+      return saveHtmlWithDialog(
+        content,
+        typeof suggestedName === 'string' ? suggestedName : undefined
+      );
+    }
+  );
+
+  ipcMain.handle('file:savePdf', async (_event, suggestedName: unknown) => {
+    return savePdfWithDialog(
+      typeof suggestedName === 'string' ? suggestedName : undefined
+    );
   });
 
   ipcMain.handle('file:resetSession', () => {
