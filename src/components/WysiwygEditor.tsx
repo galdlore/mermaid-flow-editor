@@ -3,6 +3,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from 'react';
 import {
   Editor,
@@ -11,6 +12,7 @@ import {
   rootCtx,
   serializerCtx,
 } from '@milkdown/kit/core';
+import type { Ctx } from '@milkdown/kit/ctx';
 import {
   blockquoteSchema,
   codeBlockSchema,
@@ -41,6 +43,7 @@ import {
   addRowAfter,
   deleteColumn,
   deleteRow,
+  isInTable,
 } from '@milkdown/kit/prose/tables';
 import { type NodeView } from '@milkdown/kit/prose/view';
 import { $view, callCommand, replaceAll } from '@milkdown/kit/utils';
@@ -111,6 +114,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
     const initialValueRef = useRef(value);
     const lastEmittedRef = useRef(value);
     const suppressedDocRef = useRef<ProseNode | null>(null);
+    const [isCursorInTable, setIsCursorInTable] = useState(false);
 
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
@@ -291,12 +295,22 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       const initMarkdown = initialValueRef.current;
       lastEmittedRef.current = initMarkdown;
 
+      const syncTableCursorState = (innerCtx: Ctx): void => {
+        try {
+          const view = innerCtx.get(editorViewCtx);
+          setIsCursorInTable(isInTable(view.state));
+        } catch {
+          setIsCursorInTable(false);
+        }
+      };
+
       void Editor.make()
         .config((ctx) => {
           ctx.set(rootCtx, mountEl);
           ctx.set(defaultValueCtx, initMarkdown);
           ctx.get(listenerCtx)
             .updated((innerCtx, doc, prevDoc) => {
+              syncTableCursorState(innerCtx);
               if (prevDoc && prevDoc.eq(doc)) {
                 return;
               }
@@ -309,6 +323,9 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
                 lastEmittedRef.current = nextMd;
                 onChangeRef.current(nextMd);
               }
+            })
+            .selectionUpdated((innerCtx) => {
+              syncTableCursorState(innerCtx);
             })
             .blur(() => {
               flushCurrentMarkdown();
@@ -329,7 +346,9 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
           editorRef.current = editor;
           readyRef.current = true;
           editor.action((ctx) => {
-            suppressedDocRef.current = ctx.get(editorViewCtx).state.doc;
+            const view = ctx.get(editorViewCtx);
+            suppressedDocRef.current = view.state.doc;
+            setIsCursorInTable(isInTable(view.state));
           });
         });
 
@@ -338,6 +357,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
         readyRef.current = false;
         editorRef.current = null;
         suppressedDocRef.current = null;
+        setIsCursorInTable(false);
         if (createdEditor) {
           void createdEditor.destroy();
         }
@@ -357,7 +377,9 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       lastEmittedRef.current = value;
       editor.action(replaceAll(value));
       editor.action((ctx) => {
-        suppressedDocRef.current = ctx.get(editorViewCtx).state.doc;
+        const view = ctx.get(editorViewCtx);
+        suppressedDocRef.current = view.state.doc;
+        setIsCursorInTable(isInTable(view.state));
       });
     }, [value]);
 
@@ -579,40 +601,42 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       <section className="editor-pane-wysiwyg">
         <div className="pane-header">
           <span>{t.editor.wysiwygPaneHeader}</span>
-          <div className="wysiwyg-table-actions">
-            <button
-              type="button"
-              className="wysiwyg-table-btn"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => runTableAction(addRowAfter)}
-            >
-              {t.editor.tableAddRowAfter}
-            </button>
-            <button
-              type="button"
-              className="wysiwyg-table-btn"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => runTableAction(addColumnAfter)}
-            >
-              {t.editor.tableAddColAfter}
-            </button>
-            <button
-              type="button"
-              className="wysiwyg-table-btn"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => runTableAction(deleteRow)}
-            >
-              {t.editor.tableDeleteRow}
-            </button>
-            <button
-              type="button"
-              className="wysiwyg-table-btn"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => runTableAction(deleteColumn)}
-            >
-              {t.editor.tableDeleteCol}
-            </button>
-          </div>
+          {isCursorInTable && (
+            <div className="wysiwyg-table-actions">
+              <button
+                type="button"
+                className="wysiwyg-table-btn"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runTableAction(addRowAfter)}
+              >
+                {t.editor.tableAddRowAfter}
+              </button>
+              <button
+                type="button"
+                className="wysiwyg-table-btn"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runTableAction(addColumnAfter)}
+              >
+                {t.editor.tableAddColAfter}
+              </button>
+              <button
+                type="button"
+                className="wysiwyg-table-btn"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runTableAction(deleteRow)}
+              >
+                {t.editor.tableDeleteRow}
+              </button>
+              <button
+                type="button"
+                className="wysiwyg-table-btn"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runTableAction(deleteColumn)}
+              >
+                {t.editor.tableDeleteCol}
+              </button>
+            </div>
+          )}
         </div>
         <div className="wysiwyg-editor-scroll" onClick={handleContainerClick}>
           <div ref={mountRef} className="wysiwyg-prosemirror-root" />

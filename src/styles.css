@@ -668,6 +668,10 @@ body,
   flex-wrap: wrap;
 }
 
+.editor-pane-wysiwyg .pane-header {
+  min-height: 40px;
+}
+
 .wysiwyg-table-btn {
   padding: 3px 8px;
   font-size: 11px;
