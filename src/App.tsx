@@ -31,9 +31,21 @@ import {
   setBrowserFileHandle,
 } from './utils/fileAdapter';
 import { replaceMermaidBlock } from './utils/markdownMermaidBlocks';
-import { isElectronEnv } from './utils/storage';
+import { isElectronEnv, readLocalStorage, writeLocalStorage } from './utils/storage';
 
 const LEGACY_DRAFT_STORAGE_KEY = 'mermaid-flow-editor:draft';
+const EDITOR_MODE_STORAGE_KEY = 'mermaid-flow-editor:editor-mode';
+
+function loadInitialEditorMode(): 'wysiwyg' | 'split' {
+  const saved = readLocalStorage(EDITOR_MODE_STORAGE_KEY);
+  if (saved === 'wysiwyg' || saved === 'split') {
+    return saved;
+  }
+  if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 768px)').matches) {
+    return 'wysiwyg';
+  }
+  return 'split';
+}
 
 function createInitialTabsState(lang: Language): PersistedTabsState {
   const defaultSample = getInitialMarkdownByLang(lang);
@@ -79,6 +91,12 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const [editorMode, setEditorMode] = useState<'wysiwyg' | 'split'>(loadInitialEditorMode);
+
+  const handleChangeEditorMode = useCallback((nextMode: 'wysiwyg' | 'split') => {
+    setEditorMode(nextMode);
+    writeLocalStorage(EDITOR_MODE_STORAGE_KEY, nextMode);
+  }, []);
 
   const [mermaidModalOpen, setMermaidModalOpen] = useState(false);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -478,7 +496,7 @@ export default function App() {
   const handleApplyMermaid = (generatedCode: string): void => {
     const targetTabId = editingTabId ?? activeTab.id;
     if (editingBlockIndex === null) {
-      editorRef.current?.insertAtCursor(`\n\`\`\`mermaid\n${generatedCode}\n\`\`\`\n`);
+      editorRef.current?.insertMermaidBlock(generatedCode);
     } else {
       setTabsState((prev) => ({
         ...prev,
@@ -503,16 +521,26 @@ export default function App() {
         tabCount={tabs.length}
         isDirty={activeTab.isDirty}
         switcherOpen={tabSwitcherOpen}
+        editorMode={editorMode}
+        onToggleEditorMode={() =>
+          handleChangeEditorMode(editorMode === 'wysiwyg' ? 'split' : 'wysiwyg')
+        }
         onOpenTabSwitcher={() => setTabSwitcherOpen((prev) => !prev)}
         onNewFile={handleNewTab}
         onOpenFile={() => void handleOpenFile()}
         onSaveFile={() => void handleSaveFile()}
         onSaveFileAs={() => void handleSaveFileAs()}
-        onInsertLinePrefix={(prefix) => editorRef.current?.insertLinePrefix(prefix)}
-        onWrapSelection={(prefix, suffix, placeholder) =>
-          editorRef.current?.wrapSelection(prefix, suffix, placeholder)
-        }
-        onInsertText={(text) => editorRef.current?.insertAtCursor(text)}
+        onHeading={(level) => editorRef.current?.applyHeading(level)}
+        onBold={() => editorRef.current?.applyBold()}
+        onItalic={() => editorRef.current?.applyItalic()}
+        onStrike={() => editorRef.current?.applyStrike()}
+        onLink={() => editorRef.current?.applyLink()}
+        onBulletList={() => editorRef.current?.applyBulletList()}
+        onOrderedList={() => editorRef.current?.applyOrderedList()}
+        onTaskList={() => editorRef.current?.applyTaskList()}
+        onQuote={() => editorRef.current?.applyQuote()}
+        onCodeBlock={() => editorRef.current?.applyCodeBlock()}
+        onInsertTable={(rows, cols) => editorRef.current?.insertTable(rows, cols)}
         onOpenNewMermaid={handleOpenNewMermaid}
       />
 
@@ -546,6 +574,8 @@ export default function App() {
           value={activeTab.content}
           onChange={handleChangeText}
           onEditMermaid={handleEditMermaid}
+          editorMode={editorMode}
+          onChangeEditorMode={handleChangeEditorMode}
           activeTabTitle={activeDisplayTitle}
           tabCount={tabs.length}
           isDirty={activeTab.isDirty}

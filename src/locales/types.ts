@@ -109,6 +109,9 @@ export interface TranslationCatalog {
     tableBodyCell: string;
     mermaidButtonTitle: string;
     mermaidButtonLabel: string;
+    editorModeWysiwygLabel: string;
+    editorModeSplitLabel: string;
+    editorModeToggleTitle: string;
     unsavedBadge: string;
     langButtonLabel: string;
     langButtonTitle: string;
@@ -121,8 +124,14 @@ export interface TranslationCatalog {
     editorPaneHeader: string;
     editorPlaceholder: string;
     previewPaneHeader: string;
+    wysiwygPaneHeader: string;
+    mobileWysiwygLabel: string;
     mobileEditLabel: string;
     mobilePreviewLabel: string;
+    tableAddRowAfter: string;
+    tableAddColAfter: string;
+    tableDeleteRow: string;
+    tableDeleteCol: string;
     tabSizeLabel: string;
     tabSpacesOption: (count: number) => string;
   };

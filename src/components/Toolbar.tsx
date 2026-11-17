@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import {
   Bold,
   CheckSquare,
   ChevronDown,
   Code,
+  Columns2,
   FileDown,
   FilePlus,
   FolderOpen,
@@ -16,6 +17,7 @@ import {
   Link,
   List,
   ListOrdered,
+  PenLine,
   Quote,
   Save,
   Strikethrough,
@@ -28,37 +30,25 @@ export interface ToolbarProps {
   tabCount: number;
   isDirty: boolean;
   switcherOpen: boolean;
+  editorMode: 'wysiwyg' | 'split';
+  onToggleEditorMode: () => void;
   onOpenTabSwitcher: () => void;
   onNewFile: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
   onSaveFileAs: () => void;
-  onInsertLinePrefix: (prefix: string) => void;
-  onWrapSelection: (prefix: string, suffix: string, placeholder: string) => void;
-  onInsertText: (text: string) => void;
+  onHeading: (level: 1 | 2 | 3) => void;
+  onBold: () => void;
+  onItalic: () => void;
+  onStrike: () => void;
+  onLink: () => void;
+  onBulletList: () => void;
+  onOrderedList: () => void;
+  onTaskList: () => void;
+  onQuote: () => void;
+  onCodeBlock: () => void;
+  onInsertTable: (rows: number, cols: number) => void;
   onOpenNewMermaid: () => void;
-}
-
-function buildMarkdownTable(
-  rows: number,
-  cols: number,
-  getColHeader: (index: number) => string,
-  bodyCell: string
-): string {
-  const safeRows = Math.max(1, Math.min(20, rows));
-  const safeCols = Math.max(1, Math.min(12, cols));
-
-  const headers = Array.from({ length: safeCols }, (_, index) => getColHeader(index + 1));
-  const dividers = Array.from({ length: safeCols }, () => '---');
-  const bodyRow = Array.from({ length: safeCols }, () => bodyCell);
-
-  const lines = [
-    `| ${headers.join(' | ')} |`,
-    `| ${dividers.join(' | ')} |`,
-    ...Array.from({ length: safeRows }, () => `| ${bodyRow.join(' | ')} |`),
-  ];
-
-  return `\n${lines.join('\n')}\n`;
 }
 
 export default function Toolbar({
@@ -66,14 +56,24 @@ export default function Toolbar({
   tabCount,
   isDirty,
   switcherOpen,
+  editorMode,
+  onToggleEditorMode,
   onOpenTabSwitcher,
   onNewFile,
   onOpenFile,
   onSaveFile,
   onSaveFileAs,
-  onInsertLinePrefix,
-  onWrapSelection,
-  onInsertText,
+  onHeading,
+  onBold,
+  onItalic,
+  onStrike,
+  onLink,
+  onBulletList,
+  onOrderedList,
+  onTaskList,
+  onQuote,
+  onCodeBlock,
+  onInsertTable,
   onOpenNewMermaid,
 }: ToolbarProps) {
   const { toggleLang, t } = useI18n();
@@ -81,15 +81,12 @@ export default function Toolbar({
   const [tableRows, setTableRows] = useState(2);
   const [tableCols, setTableCols] = useState(2);
 
+  const keepEditorFocus = (event: MouseEvent<HTMLButtonElement>): void => {
+    event.preventDefault();
+  };
+
   const handleInsertTable = (): void => {
-    onInsertText(
-      buildMarkdownTable(
-        tableRows,
-        tableCols,
-        t.toolbar.tableColHeader,
-        t.toolbar.tableBodyCell
-      )
-    );
+    onInsertTable(tableRows, tableCols);
     setTablePopoverOpen(false);
   };
 
@@ -120,7 +117,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('# ')}
+          onMouseDown={keepEditorFocus}
+          onClick={() => onHeading(1)}
           title={t.toolbar.h1Title}
         >
           <Heading1 size={16} />
@@ -128,7 +126,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('## ')}
+          onMouseDown={keepEditorFocus}
+          onClick={() => onHeading(2)}
           title={t.toolbar.h2Title}
         >
           <Heading2 size={16} />
@@ -136,7 +135,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('### ')}
+          onMouseDown={keepEditorFocus}
+          onClick={() => onHeading(3)}
           title={t.toolbar.h3Title}
         >
           <Heading3 size={16} />
@@ -149,7 +149,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('**', '**', t.toolbar.boldPlaceholder)}
+          onMouseDown={keepEditorFocus}
+          onClick={onBold}
           title={t.toolbar.boldTitle}
         >
           <Bold size={16} />
@@ -157,7 +158,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('*', '*', t.toolbar.italicPlaceholder)}
+          onMouseDown={keepEditorFocus}
+          onClick={onItalic}
           title={t.toolbar.italicTitle}
         >
           <Italic size={16} />
@@ -165,7 +167,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('~~', '~~', t.toolbar.strikePlaceholder)}
+          onMouseDown={keepEditorFocus}
+          onClick={onStrike}
           title={t.toolbar.strikeTitle}
         >
           <Strikethrough size={16} />
@@ -173,7 +176,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onWrapSelection('[', '](https://example.com)', t.toolbar.linkPlaceholder)}
+          onMouseDown={keepEditorFocus}
+          onClick={onLink}
           title={t.toolbar.linkTitle}
         >
           <Link size={16} />
@@ -186,7 +190,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('- ')}
+          onMouseDown={keepEditorFocus}
+          onClick={onBulletList}
           title={t.toolbar.bulletListTitle}
         >
           <List size={16} />
@@ -194,7 +199,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('1. ')}
+          onMouseDown={keepEditorFocus}
+          onClick={onOrderedList}
           title={t.toolbar.orderedListTitle}
         >
           <ListOrdered size={16} />
@@ -202,7 +208,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('- [ ] ')}
+          onMouseDown={keepEditorFocus}
+          onClick={onTaskList}
           title={t.toolbar.taskListTitle}
         >
           <CheckSquare size={16} />
@@ -210,7 +217,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertLinePrefix('> ')}
+          onMouseDown={keepEditorFocus}
+          onClick={onQuote}
           title={t.toolbar.quoteTitle}
         >
           <Quote size={16} />
@@ -218,7 +226,8 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-icon"
-          onClick={() => onInsertText(t.toolbar.codeBlockSnippet)}
+          onMouseDown={keepEditorFocus}
+          onClick={onCodeBlock}
           title={t.toolbar.codeBlockTitle}
         >
           <Code size={16} />
@@ -231,6 +240,7 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn"
+          onMouseDown={keepEditorFocus}
           onClick={() => setTablePopoverOpen((prev) => !prev)}
           title={t.toolbar.tableButtonTitle}
         >
@@ -275,11 +285,26 @@ export default function Toolbar({
         <button
           type="button"
           className="toolbar-btn toolbar-btn-accent"
+          onMouseDown={keepEditorFocus}
           onClick={onOpenNewMermaid}
           title={t.toolbar.mermaidButtonTitle}
         >
           <GitBranch size={16} />
           <span>{t.toolbar.mermaidButtonLabel}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`toolbar-btn toolbar-mode-toggle-btn ${editorMode === 'wysiwyg' ? 'is-active' : ''}`}
+          onClick={onToggleEditorMode}
+          title={t.toolbar.editorModeToggleTitle}
+        >
+          {editorMode === 'wysiwyg' ? <Columns2 size={16} /> : <PenLine size={16} />}
+          <span>
+            {editorMode === 'wysiwyg'
+              ? t.toolbar.editorModeSplitLabel
+              : t.toolbar.editorModeWysiwygLabel}
+          </span>
         </button>
       </div>
 

@@ -15,6 +15,7 @@ import remarkGfm from 'remark-gfm';
 import { ChevronDown, FileText, Pencil } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { renderMermaidSvg } from '../utils/mermaidRender';
+import WysiwygEditor, { type WysiwygEditorHandle } from './WysiwygEditor';
 import {
   computeTabIndentEdit,
   TAB_SIZE_OPTIONS,
@@ -25,6 +26,28 @@ import { readLocalStorage, writeLocalStorage } from '../utils/storage';
 
 const TAB_SIZE_STORAGE_KEY = 'mermaid-flow-editor:tab-size';
 
+function buildMarkdownTable(
+  rows: number,
+  cols: number,
+  getColHeader: (index: number) => string,
+  bodyCell: string
+): string {
+  const safeRows = Math.max(1, Math.min(20, rows));
+  const safeCols = Math.max(1, Math.min(12, cols));
+
+  const headers = Array.from({ length: safeCols }, (_, index) => getColHeader(index + 1));
+  const dividers = Array.from({ length: safeCols }, () => '---');
+  const bodyRow = Array.from({ length: safeCols }, () => bodyCell);
+
+  const lines = [
+    `| ${headers.join(' | ')} |`,
+    `| ${dividers.join(' | ')} |`,
+    ...Array.from({ length: safeRows }, () => `| ${bodyRow.join(' | ')} |`),
+  ];
+
+  return `\n${lines.join('\n')}\n`;
+}
+
 function loadInitialTabSize(): TabSizeOption {
   const raw = Number(readLocalStorage(TAB_SIZE_STORAGE_KEY));
   if (raw === 4) {
@@ -34,6 +57,18 @@ function loadInitialTabSize(): TabSizeOption {
 }
 
 export interface MarkdownEditorHandle {
+  applyHeading: (level: 1 | 2 | 3) => void;
+  applyBold: () => void;
+  applyItalic: () => void;
+  applyStrike: () => void;
+  applyLink: () => void;
+  applyBulletList: () => void;
+  applyOrderedList: () => void;
+  applyTaskList: () => void;
+  applyQuote: () => void;
+  applyCodeBlock: () => void;
+  insertTable: (rows: number, cols: number) => void;
+  insertMermaidBlock: (code: string) => void;
   insertAtCursor: (text: string) => void;
   wrapSelection: (prefix: string, suffix: string, placeholder: string) => void;
   insertLinePrefix: (prefix: string) => void;
@@ -44,6 +79,8 @@ export interface MarkdownEditorProps {
   value: string;
   onChange: (nextValue: string) => void;
   onEditMermaid: (blockIndex: number, code: string) => void;
+  editorMode: 'wysiwyg' | 'split';
+  onChangeEditorMode: (nextMode: 'wysiwyg' | 'split') => void;
   activeTabTitle?: string;
   tabCount?: number;
   isDirty?: boolean;
@@ -119,6 +156,8 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       value,
       onChange,
       onEditMermaid,
+      editorMode,
+      onChangeEditorMode,
       activeTabTitle,
       tabCount = 1,
       isDirty = false,
@@ -128,14 +167,35 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
   ) {
     const { t } = useI18n();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const wysiwygRef = useRef<WysiwygEditorHandle>(null);
     const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
-    const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit');
+    const [mobilePane, setMobilePane] = useState<'wysiwyg' | 'edit' | 'preview'>('wysiwyg');
+    const prevEditorModeRef = useRef(editorMode);
+
+    useEffect(() => {
+      if (prevEditorModeRef.current === editorMode) {
+        return;
+      }
+      prevEditorModeRef.current = editorMode;
+      if (editorMode === 'wysiwyg') {
+        setMobilePane('wysiwyg');
+      } else {
+        setMobilePane((prev) => (prev === 'wysiwyg' ? 'edit' : prev));
+      }
+    }, [editorMode]);
 
     const mermaidBlocks = useMemo(() => extractMermaidBlocks(value), [value]);
 
     const handleTabSizeChange = (nextSize: TabSizeOption): void => {
       setTabSize(nextSize);
       writeLocalStorage(TAB_SIZE_STORAGE_KEY, String(nextSize));
+    };
+
+    const isWysiwygActive = (): boolean => {
+      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) {
+        return mobilePane === 'wysiwyg';
+      }
+      return editorMode === 'wysiwyg';
     };
 
     const applyEdit = (
@@ -154,60 +214,171 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       });
     };
 
+    const insertAtTextareaCursor = (text: string): void => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        onChange(value + text);
+        return;
+      }
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const nextValue = value.slice(0, start) + text + value.slice(end);
+      const nextCursor = start + text.length;
+      applyEdit(nextValue, nextCursor, nextCursor);
+    };
+
+    const wrapTextareaSelection = (
+      prefix: string,
+      suffix: string,
+      placeholder: string
+    ): void => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        onChange(`${value}${prefix}${placeholder}${suffix}`);
+        return;
+      }
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selected = value.slice(start, end);
+      const inner = selected || placeholder;
+      const inserted = `${prefix}${inner}${suffix}`;
+      const nextValue = value.slice(0, start) + inserted + value.slice(end);
+      const innerStart = start + prefix.length;
+      const innerEnd = innerStart + inner.length;
+      applyEdit(nextValue, innerStart, innerEnd);
+    };
+
+    const insertTextareaLinePrefix = (prefix: string): void => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        onChange(`${value}\n${prefix}`);
+        return;
+      }
+      const start = textarea.selectionStart;
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const nextValue = value.slice(0, lineStart) + prefix + value.slice(lineStart);
+      const nextCursor = start + prefix.length;
+      applyEdit(nextValue, nextCursor, nextCursor);
+    };
+
     useImperativeHandle(
       ref,
       () => ({
+        applyHeading(level: 1 | 2 | 3) {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyHeading(level);
+            return;
+          }
+          insertTextareaLinePrefix(`${'#'.repeat(level)} `);
+        },
+        applyBold() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyBold();
+            return;
+          }
+          wrapTextareaSelection('**', '**', t.toolbar.boldPlaceholder);
+        },
+        applyItalic() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyItalic();
+            return;
+          }
+          wrapTextareaSelection('*', '*', t.toolbar.italicPlaceholder);
+        },
+        applyStrike() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyStrike();
+            return;
+          }
+          wrapTextareaSelection('~~', '~~', t.toolbar.strikePlaceholder);
+        },
+        applyLink() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyLink(t.toolbar.linkPlaceholder);
+            return;
+          }
+          wrapTextareaSelection('[', '](https://example.com)', t.toolbar.linkPlaceholder);
+        },
+        applyBulletList() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyBulletList();
+            return;
+          }
+          insertTextareaLinePrefix('- ');
+        },
+        applyOrderedList() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyOrderedList();
+            return;
+          }
+          insertTextareaLinePrefix('1. ');
+        },
+        applyTaskList() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyTaskList();
+            return;
+          }
+          insertTextareaLinePrefix('- [ ] ');
+        },
+        applyQuote() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyQuote();
+            return;
+          }
+          insertTextareaLinePrefix('> ');
+        },
+        applyCodeBlock() {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.applyCodeBlock();
+            return;
+          }
+          insertAtTextareaCursor(t.toolbar.codeBlockSnippet);
+        },
+        insertTable(rows: number, cols: number) {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.insertTable(rows, cols);
+            return;
+          }
+          insertAtTextareaCursor(
+            buildMarkdownTable(
+              rows,
+              cols,
+              t.toolbar.tableColHeader,
+              t.toolbar.tableBodyCell
+            )
+          );
+        },
+        insertMermaidBlock(code: string) {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.insertMermaidBlock(code);
+            return;
+          }
+          insertAtTextareaCursor(`\n\`\`\`mermaid\n${code}\n\`\`\`\n`);
+        },
         insertAtCursor(text: string) {
-          const textarea = textareaRef.current;
-          if (!textarea) {
-            onChange(value + text);
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.insertText(text);
             return;
           }
-          const start = textarea.selectionStart;
-          const end = textarea.selectionEnd;
-          const nextValue = value.slice(0, start) + text + value.slice(end);
-          const nextCursor = start + text.length;
-          applyEdit(nextValue, nextCursor, nextCursor);
+          insertAtTextareaCursor(text);
         },
-
-        wrapSelection(prefix: string, suffix: string, placeholder: string) {
-          const textarea = textareaRef.current;
-          if (!textarea) {
-            onChange(`${value}${prefix}${placeholder}${suffix}`);
-            return;
-          }
-          const start = textarea.selectionStart;
-          const end = textarea.selectionEnd;
-          const selected = value.slice(start, end);
-          const inner = selected || placeholder;
-          const inserted = `${prefix}${inner}${suffix}`;
-          const nextValue = value.slice(0, start) + inserted + value.slice(end);
-          const innerStart = start + prefix.length;
-          const innerEnd = innerStart + inner.length;
-          applyEdit(nextValue, innerStart, innerEnd);
-        },
-
-        insertLinePrefix(prefix: string) {
-          const textarea = textareaRef.current;
-          if (!textarea) {
-            onChange(`${value}\n${prefix}`);
-            return;
-          }
-          const start = textarea.selectionStart;
-          const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-          const nextValue = value.slice(0, lineStart) + prefix + value.slice(lineStart);
-          const nextCursor = start + prefix.length;
-          applyEdit(nextValue, nextCursor, nextCursor);
-        },
-
+        wrapSelection: wrapTextareaSelection,
+        insertLinePrefix: insertTextareaLinePrefix,
         activateEditMode() {
-          setMobilePane('edit');
-          requestAnimationFrame(() => {
-            textareaRef.current?.focus();
-          });
+          if (editorMode === 'wysiwyg') {
+            setMobilePane('wysiwyg');
+            requestAnimationFrame(() => {
+              wysiwygRef.current?.focus();
+            });
+          } else {
+            setMobilePane('edit');
+            requestAnimationFrame(() => {
+              textareaRef.current?.focus();
+            });
+          }
         },
       }),
-      [value, onChange]
+      [value, onChange, editorMode, mobilePane, t]
     );
 
     const resolveBlockIndex = (startLine: number | undefined, codeText: string): number => {
@@ -282,9 +453,24 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             <button
               type="button"
               role="tab"
+              aria-selected={mobilePane === 'wysiwyg'}
+              className={`mobile-editor-tab-btn ${mobilePane === 'wysiwyg' ? 'is-active' : ''}`}
+              onClick={() => {
+                setMobilePane('wysiwyg');
+                onChangeEditorMode('wysiwyg');
+              }}
+            >
+              {t.editor.mobileWysiwygLabel}
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={mobilePane === 'edit'}
               className={`mobile-editor-tab-btn ${mobilePane === 'edit' ? 'is-active' : ''}`}
-              onClick={() => setMobilePane('edit')}
+              onClick={() => {
+                setMobilePane('edit');
+                onChangeEditorMode('split');
+              }}
             >
               {t.editor.mobileEditLabel}
             </button>
@@ -299,7 +485,19 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             </button>
           </div>
         </div>
-        <div className="editor-split-pane" data-mobile-active={mobilePane}>
+        <div
+          className="editor-split-pane"
+          data-editor-mode={editorMode}
+          data-mobile-active={mobilePane}
+        >
+        {(editorMode === 'wysiwyg' || mobilePane === 'wysiwyg') && (
+          <WysiwygEditor
+            ref={wysiwygRef}
+            value={value}
+            onChange={onChange}
+            onEditMermaid={onEditMermaid}
+          />
+        )}
         <section className="editor-pane-left">
           <div className="pane-header">
             <span>{t.editor.editorPaneHeader}</span>
