@@ -157,13 +157,16 @@ function buildExtension(): void {
   const locales: Record<'ja' | 'en', Record<string, { message: string }>> = {
     ja: {
       extName: { message: 'Mermaid Flow Editor' },
-      extDescription: { message: 'MarkdownとMermaid図をGUIで作成・編集できるエディタ' },
+      extDescription: {
+        message: 'Markdown文書と15種類のMermaid図を完全GUIで作成・編集でき、HTMLやPDF出力にも対応したエディタ',
+      },
       actionTitle: { message: 'Mermaid Flow Editor を開く' },
     },
     en: {
       extName: { message: 'Mermaid Flow Editor' },
       extDescription: {
-        message: 'A visual Markdown editor with a GUI builder for Mermaid flowcharts',
+        message:
+          'A visual WYSIWYG Markdown editor with GUI builders for 15 Mermaid diagram types and HTML/PDF export.',
       },
       actionTitle: { message: 'Open Mermaid Flow Editor' },
     },
