@@ -96,6 +96,32 @@ test('persistTabsState and loadPersistedTabsState round-trip tabs and migrate le
     const restored = loadPersistedTabsState('tabs-key', 'legacy-key', '# Default');
     assert.equal(restored.activeTabId, 'tab-b');
     assert.deepEqual(restored.tabs, tabs);
+
+    const guideTabs = [
+      {
+        id: 'tab-g',
+        filePath: null,
+        content: '# Guide',
+        isDirty: false,
+        isGuide: true,
+        remoteFileName: 'guide.md',
+      },
+    ];
+    persistTabsState('tabs-key', guideTabs, 'tab-g');
+    const restoredGuide = loadPersistedTabsState('tabs-key', 'legacy-key', '# Default');
+    assert.deepEqual(restoredGuide.tabs, guideTabs);
+    assert.deepEqual(
+      computeTabDisplayTitles(restoredGuide.tabs, '無題.md', '使い方ガイド.md'),
+      { 'tab-g': '使い方ガイド.md' }
+    );
+    assert.deepEqual(
+      computeTabDisplayTitles(
+        [{ id: 'tab-r', filePath: null, remoteFileName: 'notes/design.md' }],
+        '無題.md',
+        '使い方ガイド.md'
+      ),
+      { 'tab-r': 'design.md' }
+    );
   } finally {
     restore();
   }

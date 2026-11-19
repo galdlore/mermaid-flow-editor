@@ -9,14 +9,14 @@ import type {
   C4RelationData,
   C4RelationType,
 } from '../types/editor';
-import { sanitizeCssColor } from './inputSafeguard';
+import { sanitizeCssColor } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   allocateUniqueId,
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_SUBTYPES = new Set<C4DiagramSubtype>([
   'C4Context',

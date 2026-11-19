@@ -75,7 +75,7 @@ export function sanitizeSafeUrl(raw?: string): string | undefined {
     return /^https?:\/\//i.test(cleaned) ? cleaned : undefined;
   }
 
-  if (cleaned.startsWith('/') || cleaned.startsWith('#')) {
+  if ((cleaned.startsWith('/') && !cleaned.startsWith('//')) || cleaned.startsWith('#')) {
     return cleaned;
   }
 

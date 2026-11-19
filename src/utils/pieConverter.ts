@@ -11,7 +11,7 @@ import {
   sanitizeSingleLineComment,
   sanitizeYamlSingleQuoted,
   unquoteYamlString,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_LEGEND_POSITIONS = new Set<PieLegendPosition>([
   'right',

@@ -1,6 +1,13 @@
 import mermaid from 'mermaid';
 
 let initialized = false;
+const MAX_RENDER_CACHE_ENTRIES = 64;
+const renderCache = new Map<string, { svg: string; error: string | null }>();
+
+/** テストやリセット向けにMermaid描画キャッシュを消去する */
+export function clearMermaidRenderCache(): void {
+  renderCache.clear();
+}
 
 const DANGEROUS_SVG_TAGS = new Set([
   'script',
@@ -99,11 +106,28 @@ export async function renderMermaidSvg(
   renderId: string,
   code: string
 ): Promise<{ svg: string; error: string | null }> {
+  const cached = renderCache.get(code);
+  if (cached) {
+    renderCache.delete(code);
+    renderCache.set(code, cached);
+    return cached;
+  }
+
   ensureMermaidInitialized();
 
   try {
     const result = await mermaid.render(renderId, code);
-    return { svg: sanitizeRenderedSvg(result.svg), error: null };
+    const sanitized = { svg: sanitizeRenderedSvg(result.svg), error: null };
+    if (sanitized.svg) {
+      if (renderCache.size >= MAX_RENDER_CACHE_ENTRIES) {
+        const oldestKey = renderCache.keys().next().value;
+        if (typeof oldestKey === 'string') {
+          renderCache.delete(oldestKey);
+        }
+      }
+      renderCache.set(code, sanitized);
+    }
+    return sanitized;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Mermaidの描画に失敗しました。';
     return { svg: '', error: message };

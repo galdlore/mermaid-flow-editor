@@ -727,6 +727,31 @@ export interface FileSaveResult {
   filePath?: string;
 }
 
+export type RemoteRequestMethod =
+  | 'GET'
+  | 'PUT'
+  | 'POST'
+  | 'OPTIONS'
+  | 'HEAD'
+  | 'PROPFIND'
+  | 'MKCOL';
+
+export interface RemoteRequestPayload {
+  url: string;
+  method: RemoteRequestMethod;
+  headers: Record<string, string>;
+  body?: string;
+  readResponseBody?: boolean;
+}
+
+export interface RemoteRequestIpcResult {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  bodyText?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   openFile: () => Promise<FileOpenResult>;
   saveFile: (filePath: string | null, content: string) => Promise<FileSaveResult>;
@@ -734,6 +759,7 @@ export interface ElectronAPI {
   saveHtmlFile?: (content: string, suggestedName?: string) => Promise<FileSaveResult>;
   savePdfFile?: (suggestedName?: string) => Promise<FileSaveResult>;
   resetFileSession?: () => Promise<void>;
+  remoteRequest?: (payload: RemoteRequestPayload) => Promise<RemoteRequestIpcResult>;
 }
 
 declare global {

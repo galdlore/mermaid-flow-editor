@@ -11,6 +11,22 @@ interface FileSaveResult {
   filePath?: string;
 }
 
+interface RemoteRequestPayload {
+  url: string;
+  method: 'GET' | 'PUT' | 'POST' | 'OPTIONS' | 'HEAD' | 'PROPFIND' | 'MKCOL';
+  headers: Record<string, string>;
+  body?: string;
+  readResponseBody?: boolean;
+}
+
+interface RemoteRequestIpcResult {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  bodyText?: string;
+  error?: string;
+}
+
 interface ElectronBridgeAPI {
   openFile: () => Promise<FileOpenResult>;
   saveFile: (filePath: string | null, content: string) => Promise<FileSaveResult>;
@@ -18,6 +34,7 @@ interface ElectronBridgeAPI {
   saveHtmlFile: (content: string, suggestedName?: string) => Promise<FileSaveResult>;
   savePdfFile: (suggestedName?: string) => Promise<FileSaveResult>;
   resetFileSession: () => Promise<void>;
+  remoteRequest: (payload: RemoteRequestPayload) => Promise<RemoteRequestIpcResult>;
 }
 
 const electronAPI: ElectronBridgeAPI = {
@@ -31,6 +48,8 @@ const electronAPI: ElectronBridgeAPI = {
   savePdfFile: (suggestedName?: string) =>
     ipcRenderer.invoke('file:savePdf', suggestedName) as Promise<FileSaveResult>,
   resetFileSession: () => ipcRenderer.invoke('file:resetSession') as Promise<void>,
+  remoteRequest: (payload: RemoteRequestPayload) =>
+    ipcRenderer.invoke('remote:request', payload) as Promise<RemoteRequestIpcResult>,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

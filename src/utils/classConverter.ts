@@ -10,7 +10,7 @@ import type {
   ClassRelationData,
   ClassRelationType,
 } from '../types/editor';
-import { sanitizeCssColor } from './inputSafeguard';
+import { sanitizeCssColor } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   allocateUniqueId,
@@ -19,7 +19,7 @@ import {
   sanitizeSingleLineComment,
   sanitizeYamlSingleQuoted,
   unquoteYamlString,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_DIRECTIONS = new Set<ClassDiagramDirection>(['TB', 'BT', 'LR', 'RL']);
 const VALID_VISIBILITIES = new Set<ClassMemberVisibility>(['+', '-', '#', '~', '']);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import '@xyflow/react/dist/style.css';
 import { Check, X } from 'lucide-react';
 import { useI18n, type Language, type TranslationCatalog } from '../i18n';
 import type {

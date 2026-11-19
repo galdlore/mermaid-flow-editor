@@ -11,7 +11,7 @@ import {
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 export const DEFAULT_TREE_VIEW_CONFIG: Readonly<TreeViewConfigData> = {
   showIcons: false,

@@ -18,14 +18,11 @@ import { renderMermaidSvg } from '../utils/mermaidRender';
 import WysiwygEditor, { type WysiwygEditorHandle } from './WysiwygEditor';
 import {
   computeTabIndentEdit,
-  TAB_SIZE_OPTIONS,
   type TabSizeOption,
 } from '../utils/markdownTabIndent';
+import { computeListContinueEdit } from '../utils/markdownListContinue';
 import { extractMermaidBlocks } from '../utils/markdownMermaidBlocks';
 import { extractCleanPreviewHtml } from '../utils/htmlExport';
-import { readLocalStorage, writeLocalStorage } from '../utils/storage';
-
-const TAB_SIZE_STORAGE_KEY = 'mermaid-flow-editor:tab-size';
 
 function buildMarkdownTable(
   rows: number,
@@ -47,14 +44,6 @@ function buildMarkdownTable(
   ];
 
   return `\n${lines.join('\n')}\n`;
-}
-
-function loadInitialTabSize(): TabSizeOption {
-  const raw = Number(readLocalStorage(TAB_SIZE_STORAGE_KEY));
-  if (raw === 4) {
-    return 4;
-  }
-  return 2;
 }
 
 export interface MarkdownEditorHandle {
@@ -83,6 +72,7 @@ export interface MarkdownEditorProps {
   onEditMermaid: (blockIndex: number, code: string) => void;
   editorMode: 'wysiwyg' | 'split';
   onChangeEditorMode: (nextMode: 'wysiwyg' | 'split') => void;
+  tabSize: TabSizeOption;
   activeTabTitle?: string;
   tabCount?: number;
   isDirty?: boolean;
@@ -160,6 +150,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       onEditMermaid,
       editorMode,
       onChangeEditorMode,
+      tabSize,
       activeTabTitle,
       tabCount = 1,
       isDirty = false,
@@ -171,7 +162,6 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const wysiwygRef = useRef<WysiwygEditorHandle>(null);
     const previewBodyRef = useRef<HTMLDivElement>(null);
-    const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
     const [mobilePane, setMobilePane] = useState<'wysiwyg' | 'edit' | 'preview'>('wysiwyg');
     const prevEditorModeRef = useRef(editorMode);
 
@@ -188,11 +178,6 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     }, [editorMode]);
 
     const mermaidBlocks = useMemo(() => extractMermaidBlocks(value), [value]);
-
-    const handleTabSizeChange = (nextSize: TabSizeOption): void => {
-      setTabSize(nextSize);
-      writeLocalStorage(TAB_SIZE_STORAGE_KEY, String(nextSize));
-    };
 
     const isWysiwygActive = (): boolean => {
       if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) {
@@ -414,7 +399,6 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       event: KeyboardEvent<HTMLTextAreaElement>
     ): void => {
       if (
-        event.key !== 'Tab' ||
         event.ctrlKey ||
         event.altKey ||
         event.metaKey ||
@@ -423,16 +407,31 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
         return;
       }
 
-      event.preventDefault();
       const target = event.currentTarget;
-      const result = computeTabIndentEdit(
-        value,
-        target.selectionStart,
-        target.selectionEnd,
-        tabSize,
-        event.shiftKey
-      );
-      applyEdit(result.nextValue, result.nextStart, result.nextEnd);
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        const result = computeTabIndentEdit(
+          value,
+          target.selectionStart,
+          target.selectionEnd,
+          tabSize,
+          event.shiftKey
+        );
+        applyEdit(result.nextValue, result.nextStart, result.nextEnd);
+        return;
+      }
+
+      if (event.key === 'Enter' && !event.shiftKey) {
+        const result = computeListContinueEdit(
+          value,
+          target.selectionStart,
+          target.selectionEnd
+        );
+        if (result) {
+          event.preventDefault();
+          applyEdit(result.nextValue, result.nextStart, result.nextEnd);
+        }
+      }
     };
 
     return (
@@ -507,23 +506,6 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
         <section className="editor-pane-left">
           <div className="pane-header">
             <span>{t.editor.editorPaneHeader}</span>
-            <label className="pane-tab-size-control">
-              <span>{t.editor.tabSizeLabel}</span>
-              <select
-                className="pane-tab-size-select"
-                aria-label={t.editor.tabSizeLabel}
-                value={tabSize}
-                onChange={(event) =>
-                  handleTabSizeChange(Number(event.target.value) === 4 ? 4 : 2)
-                }
-              >
-                {TAB_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {t.editor.tabSpacesOption(size)}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
           <textarea
             ref={textareaRef}

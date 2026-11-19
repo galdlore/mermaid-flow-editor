@@ -12,7 +12,7 @@ import type {
   SequenceParticipantKind,
   SequenceStepData,
 } from '../types/editor';
-import { sanitizeCssColor } from './inputSafeguard';
+import { sanitizeCssColor } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   allocateUniqueId,
@@ -21,7 +21,7 @@ import {
   sanitizeSingleLineComment,
   sanitizeYamlSingleQuoted,
   unquoteYamlString,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const MAX_SEQUENCE_BLOCK_DEPTH = 8;
 

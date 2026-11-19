@@ -6,13 +6,13 @@ import type {
   GanttWeekday,
   GanttWeekend,
 } from '../types/editor';
-import { sanitizeSafeUrl } from './inputSafeguard';
+import { sanitizeSafeUrl } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const TASK_TAGS = new Set(['active', 'done', 'crit', 'milestone', 'vert']);
 const VALID_WEEKDAYS = new Set<string>([

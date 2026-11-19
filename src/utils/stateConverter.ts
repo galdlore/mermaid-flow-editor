@@ -7,7 +7,7 @@ import type {
   StateNotePosition,
   StateTransitionData,
 } from '../types/editor';
-import { sanitizeCssColor } from './inputSafeguard';
+import { sanitizeCssColor } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   allocateUniqueId,
@@ -16,7 +16,7 @@ import {
   sanitizeSingleLineComment,
   sanitizeYamlSingleQuoted,
   unquoteYamlString,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 export const START_END_STATE_ID = '[*]';
 

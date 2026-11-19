@@ -13,7 +13,7 @@ import {
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_DIRS = new Set<ArchitectureDirection>(['L', 'R', 'T', 'B']);
 

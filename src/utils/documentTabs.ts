@@ -5,6 +5,8 @@ export interface DocumentTab {
   filePath: string | null;
   content: string;
   isDirty: boolean;
+  remoteFileName?: string | null;
+  isGuide?: boolean;
 }
 
 export interface PersistedTabsState {
@@ -49,14 +51,24 @@ export function formatDuplicateFileName(fileName: string, suffixNumber: number):
 
 /** 開いている全タブに対して重複しない表示タイトルを計算する */
 export function computeTabDisplayTitles(
-  tabs: readonly Pick<DocumentTab, 'id' | 'filePath'>[],
-  untitledFileName: string
+  tabs: readonly Pick<DocumentTab, 'id' | 'filePath' | 'isGuide' | 'remoteFileName'>[],
+  untitledFileName: string,
+  guideFileName?: string
 ): Record<string, string> {
   const result: Record<string, string> = {};
   const usedTitles = new Set<string>();
 
   for (const tab of tabs) {
-    const baseName = getTabBaseFileName(tab.filePath, untitledFileName);
+    let baseName: string;
+    if (tab.filePath) {
+      baseName = getTabBaseFileName(tab.filePath, untitledFileName);
+    } else if (tab.isGuide && guideFileName) {
+      baseName = guideFileName;
+    } else if (tab.remoteFileName) {
+      baseName = getTabBaseFileName(tab.remoteFileName, untitledFileName);
+    } else {
+      baseName = untitledFileName;
+    }
     if (!usedTitles.has(baseName)) {
       usedTitles.add(baseName);
       result[tab.id] = baseName;
@@ -105,7 +117,11 @@ export function loadPersistedTabsState(
             item.id.length > 0 &&
             (item.filePath === null || typeof item.filePath === 'string') &&
             typeof item.content === 'string' &&
-            typeof item.isDirty === 'boolean'
+            typeof item.isDirty === 'boolean' &&
+            (item.remoteFileName === undefined ||
+              item.remoteFileName === null ||
+              typeof item.remoteFileName === 'string') &&
+            (item.isGuide === undefined || typeof item.isGuide === 'boolean')
         );
 
         if (validTabs.length > 0) {
@@ -147,6 +163,7 @@ export function loadPersistedTabsState(
         filePath: null,
         content: defaultSampleText,
         isDirty: false,
+        isGuide: true,
       },
     ],
   };

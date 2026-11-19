@@ -1,19 +1,24 @@
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   Bold,
   CheckSquare,
   ChevronDown,
+  CloudDownload,
+  CloudUpload,
   Code,
   Columns2,
   FileCode2,
   FileDown,
   FileOutput,
   FilePlus,
+  FileText,
   FolderOpen,
+  FolderUp,
   GitBranch,
   Heading1,
   Heading2,
   Heading3,
+  HelpCircle,
   Italic,
   Languages,
   Link,
@@ -23,6 +28,7 @@ import {
   Printer,
   Quote,
   Save,
+  Settings,
   Strikethrough,
   Table,
 } from 'lucide-react';
@@ -40,9 +46,14 @@ export interface ToolbarProps {
   onOpenFile: () => void;
   onSaveFile: () => void;
   onSaveFileAs: () => void;
+  onOpenFromCloud: () => void;
+  onSaveToCloud: () => void;
+  onSaveToCloudAs: () => void;
   onExportHtml: () => void;
   onExportPdf: () => void;
   onPrint: () => void;
+  onOpenSettings: () => void;
+  onOpenHelp: () => void;
   onHeading: (level: 1 | 2 | 3) => void;
   onBold: () => void;
   onItalic: () => void;
@@ -69,9 +80,14 @@ export default function Toolbar({
   onOpenFile,
   onSaveFile,
   onSaveFileAs,
+  onOpenFromCloud,
+  onSaveToCloud,
+  onSaveToCloudAs,
   onExportHtml,
   onExportPdf,
   onPrint,
+  onOpenSettings,
+  onOpenHelp,
   onHeading,
   onBold,
   onItalic,
@@ -86,9 +102,53 @@ export default function Toolbar({
   onOpenNewMermaid,
 }: ToolbarProps) {
   const { toggleLang, t } = useI18n();
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [tablePopoverOpen, setTablePopoverOpen] = useState(false);
   const [tableRows, setTableRows] = useState(2);
   const [tableCols, setTableCols] = useState(2);
+
+  const fileMenuAnchorRef = useRef<HTMLDivElement>(null);
+  const tablePopoverAnchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!fileMenuOpen && !tablePopoverOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: globalThis.MouseEvent): void => {
+      const target = event.target as Node | null;
+      if (
+        fileMenuOpen &&
+        fileMenuAnchorRef.current &&
+        target &&
+        !fileMenuAnchorRef.current.contains(target)
+      ) {
+        setFileMenuOpen(false);
+      }
+      if (
+        tablePopoverOpen &&
+        tablePopoverAnchorRef.current &&
+        target &&
+        !tablePopoverAnchorRef.current.contains(target)
+      ) {
+        setTablePopoverOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setFileMenuOpen(false);
+        setTablePopoverOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [fileMenuOpen, tablePopoverOpen]);
 
   const keepEditorFocus = (event: MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
@@ -99,42 +159,145 @@ export default function Toolbar({
     setTablePopoverOpen(false);
   };
 
+  const runFileAction = (action: () => void): void => {
+    setFileMenuOpen(false);
+    action();
+  };
+
   return (
     <header className="toolbar">
-      <div className="toolbar-group">
-        <button type="button" className="toolbar-btn" onClick={onNewFile} title={t.toolbar.newTitle}>
-          <FilePlus size={16} />
-          <span>{t.toolbar.newLabel}</span>
+      <div className="toolbar-group toolbar-popover-anchor" ref={fileMenuAnchorRef}>
+        <button
+          type="button"
+          className={`toolbar-btn toolbar-file-menu-btn ${fileMenuOpen ? 'is-open' : ''}`}
+          aria-haspopup="menu"
+          aria-expanded={fileMenuOpen}
+          onClick={() => {
+            setTablePopoverOpen(false);
+            setFileMenuOpen((prev) => !prev);
+          }}
+          title={t.toolbar.fileMenuTitle}
+        >
+          <FileText size={16} />
+          <span>{t.toolbar.fileMenuLabel}</span>
+          <ChevronDown size={13} />
         </button>
-        <button type="button" className="toolbar-btn" onClick={onOpenFile} title={t.toolbar.openTitle}>
-          <FolderOpen size={16} />
-          <span>{t.toolbar.openLabel}</span>
-        </button>
-        <button type="button" className="toolbar-btn" onClick={onSaveFile} title={t.toolbar.saveTitle}>
-          <Save size={16} />
-          <span>{t.toolbar.saveLabel}</span>
-        </button>
-        <button type="button" className="toolbar-btn" onClick={onSaveFileAs} title={t.toolbar.saveAsTitle}>
-          <FileDown size={16} />
-          <span>{t.toolbar.saveAsLabel}</span>
-        </button>
-      </div>
 
-      <div className="toolbar-divider" />
+        {fileMenuOpen && (
+          <div className="file-menu-popover" role="menu">
+            <div className="file-menu-section-label">{t.toolbar.fileSectionBasic}</div>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onNewFile)}
+              title={t.toolbar.newTitle}
+            >
+              <FilePlus size={15} />
+              <span className="file-menu-item-label">{t.toolbar.newLabel}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onOpenFile)}
+              title={t.toolbar.openTitle}
+            >
+              <FolderOpen size={15} />
+              <span className="file-menu-item-label">{t.toolbar.openLabel}</span>
+              <span className="file-menu-shortcut">Ctrl+O</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onSaveFile)}
+              title={t.toolbar.saveTitle}
+            >
+              <Save size={15} />
+              <span className="file-menu-item-label">{t.toolbar.saveLabel}</span>
+              <span className="file-menu-shortcut">Ctrl+S</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onSaveFileAs)}
+              title={t.toolbar.saveAsTitle}
+            >
+              <FileDown size={15} />
+              <span className="file-menu-item-label">{t.toolbar.saveAsLabel}</span>
+              <span className="file-menu-shortcut">Ctrl+Shift+S</span>
+            </button>
 
-      <div className="toolbar-group">
-        <button type="button" className="toolbar-btn" onClick={onExportHtml} title={t.toolbar.exportHtmlTitle}>
-          <FileCode2 size={16} />
-          <span>{t.toolbar.exportHtmlLabel}</span>
-        </button>
-        <button type="button" className="toolbar-btn" onClick={onExportPdf} title={t.toolbar.exportPdfTitle}>
-          <FileOutput size={16} />
-          <span>{t.toolbar.exportPdfLabel}</span>
-        </button>
-        <button type="button" className="toolbar-btn" onClick={onPrint} title={t.toolbar.printTitle}>
-          <Printer size={16} />
-          <span>{t.toolbar.printLabel}</span>
-        </button>
+            <div className="file-menu-divider" />
+            <div className="file-menu-section-label">{t.toolbar.fileSectionCloud}</div>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onOpenFromCloud)}
+              title={t.toolbar.openCloudTitle}
+            >
+              <CloudDownload size={15} />
+              <span className="file-menu-item-label">{t.toolbar.openCloudLabel}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onSaveToCloud)}
+              title={t.toolbar.saveCloudTitle}
+            >
+              <CloudUpload size={15} />
+              <span className="file-menu-item-label">{t.toolbar.saveCloudLabel}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onSaveToCloudAs)}
+              title={t.toolbar.saveCloudAsTitle}
+            >
+              <FolderUp size={15} />
+              <span className="file-menu-item-label">{t.toolbar.saveCloudAsLabel}</span>
+            </button>
+
+            <div className="file-menu-divider" />
+            <div className="file-menu-section-label">{t.toolbar.fileSectionExport}</div>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onExportHtml)}
+              title={t.toolbar.exportHtmlTitle}
+            >
+              <FileCode2 size={15} />
+              <span className="file-menu-item-label">{t.toolbar.exportHtmlLabel}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onExportPdf)}
+              title={t.toolbar.exportPdfTitle}
+            >
+              <FileOutput size={15} />
+              <span className="file-menu-item-label">{t.toolbar.exportPdfLabel}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="file-menu-item"
+              onClick={() => runFileAction(onPrint)}
+              title={t.toolbar.printTitle}
+            >
+              <Printer size={15} />
+              <span className="file-menu-item-label">{t.toolbar.printLabel}</span>
+              <span className="file-menu-shortcut">Ctrl+P</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="toolbar-divider" />
@@ -262,12 +425,15 @@ export default function Toolbar({
 
       <div className="toolbar-divider" />
 
-      <div className="toolbar-group toolbar-popover-anchor">
+      <div className="toolbar-group toolbar-popover-anchor" ref={tablePopoverAnchorRef}>
         <button
           type="button"
           className="toolbar-btn"
           onMouseDown={keepEditorFocus}
-          onClick={() => setTablePopoverOpen((prev) => !prev)}
+          onClick={() => {
+            setFileMenuOpen(false);
+            setTablePopoverOpen((prev) => !prev);
+          }}
           title={t.toolbar.tableButtonTitle}
         >
           <Table size={16} />
@@ -356,6 +522,24 @@ export default function Toolbar({
         >
           <Languages size={14} />
           <span>{t.toolbar.langButtonLabel}</span>
+        </button>
+        <button
+          type="button"
+          className="toolbar-icon-pill-btn"
+          onClick={onOpenSettings}
+          title={t.toolbar.settingsTitle}
+          aria-label={t.toolbar.settingsTitle}
+        >
+          <Settings size={15} />
+        </button>
+        <button
+          type="button"
+          className="toolbar-icon-pill-btn"
+          onClick={onOpenHelp}
+          title={t.toolbar.helpTitle}
+          aria-label={t.toolbar.helpTitle}
+        >
+          <HelpCircle size={15} />
         </button>
       </div>
     </header>

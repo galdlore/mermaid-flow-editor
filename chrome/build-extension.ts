@@ -206,6 +206,7 @@ function buildExtension(): void {
     background: {
       service_worker: 'background.js',
     },
+    optional_host_permissions: ['https://*/*', 'http://*/*'],
     content_security_policy: {
       extension_pages: "script-src 'self'; object-src 'self';",
     },

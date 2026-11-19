@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import Toolbar from './components/Toolbar';
 import TabBar from './components/TabBar';
 import MarkdownEditor, { type MarkdownEditorHandle } from './components/MarkdownEditor';
-import MermaidModal from './components/MermaidModal';
+import { useCloudStorage } from './hooks/useCloudStorage';
 import {
   INITIAL_MARKDOWN_EN,
   INITIAL_MARKDOWN_JA,
@@ -39,10 +39,25 @@ import {
   buildPdfFileName,
 } from './utils/htmlExport';
 import { replaceMermaidBlock } from './utils/markdownMermaidBlocks';
+import type { TabSizeOption } from './utils/markdownTabIndent';
+import { saveMarkdownToRemote, splitRemoteRelativePath } from './utils/remoteStorage';
 import { isElectronEnv, readLocalStorage, writeLocalStorage } from './utils/storage';
+
+const MermaidModal = lazy(() => import('./components/MermaidModal'));
+const SettingsModal = lazy(() => import('./components/SettingsModal'));
+const CloudBrowserModal = lazy(() => import('./components/CloudBrowserModal'));
 
 const LEGACY_DRAFT_STORAGE_KEY = 'mermaid-flow-editor:draft';
 const EDITOR_MODE_STORAGE_KEY = 'mermaid-flow-editor:editor-mode';
+const TAB_SIZE_STORAGE_KEY = 'mermaid-flow-editor:tab-size';
+
+function loadInitialTabSize(): TabSizeOption {
+  const raw = Number(readLocalStorage(TAB_SIZE_STORAGE_KEY));
+  if (raw === 4) {
+    return 4;
+  }
+  return 2;
+}
 
 function loadInitialEditorMode(): 'wysiwyg' | 'split' {
   const saved = readLocalStorage(EDITOR_MODE_STORAGE_KEY);
@@ -67,6 +82,7 @@ function createInitialTabsState(lang: Language): PersistedTabsState {
           filePath: null,
           content: defaultSample,
           isDirty: false,
+          isGuide: true,
         },
       ],
     };
@@ -100,10 +116,34 @@ export default function App() {
   const [tabSwitcherOpen, setTabSwitcherOpen] = useState(false);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const [editorMode, setEditorMode] = useState<'wysiwyg' | 'split'>(loadInitialEditorMode);
+  const [tabSize, setTabSize] = useState<TabSizeOption>(loadInitialTabSize);
+
+  const {
+    settingsModalOpen,
+    setSettingsModalOpen,
+    cloudBrowserMode,
+    setCloudBrowserMode,
+    remoteSettings,
+    remoteCredentials,
+    hasStoredSecret,
+    isSecretUnlocked,
+    isRemoteLocked,
+    formatRemoteFailureMessage,
+    handleUnlockRemoteCredentials,
+    handleClearStoredRemoteCredentials,
+    handleSaveSettingsModal,
+    ensureRemoteReadyForAction,
+    openCloudBrowser,
+  } = useCloudStorage({ t, onStatusMessage: setStatusMessage });
 
   const handleChangeEditorMode = useCallback((nextMode: 'wysiwyg' | 'split') => {
     setEditorMode(nextMode);
     writeLocalStorage(EDITOR_MODE_STORAGE_KEY, nextMode);
+  }, []);
+
+  const handleChangeTabSize = useCallback((nextSize: TabSizeOption) => {
+    setTabSize(nextSize);
+    writeLocalStorage(TAB_SIZE_STORAGE_KEY, String(nextSize));
   }, []);
 
   const [mermaidModalOpen, setMermaidModalOpen] = useState(false);
@@ -118,9 +158,13 @@ export default function App() {
     [tabs, activeTabId]
   );
 
+  const activeTabIdRef = useRef(activeTab.id);
+  activeTabIdRef.current = activeTab.id;
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const displayTitles = useMemo(
-    () => computeTabDisplayTitles(tabs, t.app.untitledFileName),
-    [tabs, t.app.untitledFileName]
+    () => computeTabDisplayTitles(tabs, t.app.untitledFileName, t.app.guideFileName),
+    [tabs, t.app.untitledFileName, t.app.guideFileName]
   );
 
   const activeDisplayTitle = displayTitles[activeTab.id] || t.app.untitledFileName;
@@ -153,8 +197,40 @@ export default function App() {
     if (isElectronEnv()) {
       return;
     }
-    persistTabsState(TABS_STORAGE_KEY, tabs, activeTab.id);
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      persistTabsState(TABS_STORAGE_KEY, tabsRef.current, activeTabIdRef.current);
+    }, 350);
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
   }, [tabs, activeTab.id]);
+
+  useEffect(() => {
+    if (isElectronEnv()) {
+      return;
+    }
+    const flushNow = (): void => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      persistTabsState(TABS_STORAGE_KEY, tabsRef.current, activeTabIdRef.current);
+    };
+    window.addEventListener('pagehide', flushNow);
+    window.addEventListener('beforeunload', flushNow);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      window.removeEventListener('beforeunload', flushNow);
+    };
+  }, []);
 
   const handleChangeText = useCallback(
     (next: string) => {
@@ -191,6 +267,39 @@ export default function App() {
     setStatusMessage(t.app.statusNewCreated);
     editorRef.current?.activateEditMode();
   }, [t]);
+
+  const handleOpenHelpGuide = useCallback(() => {
+    const guideContent = getInitialMarkdownByLang(lang);
+    const existingGuide = tabsRef.current.find(
+      (tab) => tab.isGuide && !tab.isDirty && tab.filePath === null
+    );
+    if (existingGuide) {
+      setTabsState((prev) => ({
+        activeTabId: existingGuide.id,
+        tabs: prev.tabs.map((tab) =>
+          tab.id === existingGuide.id ? { ...tab, content: guideContent } : tab
+        ),
+      }));
+      setStatusMessage(t.app.statusHelpOpened);
+      return;
+    }
+
+    const newTabId = createDocumentTabId();
+    setTabsState((prev) => ({
+      activeTabId: newTabId,
+      tabs: [
+        ...prev.tabs,
+        {
+          id: newTabId,
+          filePath: null,
+          content: guideContent,
+          isDirty: false,
+          isGuide: true,
+        },
+      ],
+    }));
+    setStatusMessage(t.app.statusHelpOpened);
+  }, [lang, t]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -261,7 +370,14 @@ export default function App() {
             activeTabId: targetTabId,
             tabs: prev.tabs.map((tab) =>
               tab.id === targetTabId
-                ? { ...tab, filePath: nextFilePath, content: nextContent, isDirty: false }
+                ? {
+                    ...tab,
+                    filePath: nextFilePath,
+                    content: nextContent,
+                    isDirty: false,
+                    isGuide: false,
+                    remoteFileName: null,
+                  }
                 : tab
             ),
           };
@@ -290,36 +406,229 @@ export default function App() {
     }
   }, [activeTab, t]);
 
-  const handleSaveFile = useCallback(async () => {
-    try {
-      const result = await saveMarkdownFile(activeTab.id, activeTab.filePath, activeTab.content);
-      if (!result.canceled && result.filePath) {
-        const savedPath = result.filePath;
+  const handleOpenFromCloud = useCallback(() => {
+    openCloudBrowser('open');
+  }, [openCloudBrowser]);
+
+  const handleSaveToCloudAs = useCallback(() => {
+    openCloudBrowser('save-as');
+  }, [openCloudBrowser]);
+
+  const handleCloudFileOpened = useCallback(
+    (remotePath: string, content: string) => {
+      const reuseActive = isUntouchedInitialTab(activeTab);
+      const targetTabId = reuseActive ? activeTab.id : createDocumentTabId();
+      if (reuseActive) {
+        releaseBrowserFileHandle(targetTabId);
+      }
+
+      setTabsState((prev) => {
+        if (reuseActive && prev.tabs.some((tab) => tab.id === targetTabId)) {
+          return {
+            activeTabId: targetTabId,
+            tabs: prev.tabs.map((tab) =>
+              tab.id === targetTabId
+                ? {
+                    ...tab,
+                    filePath: null,
+                    content,
+                    isDirty: false,
+                    remoteFileName: remotePath,
+                    isGuide: false,
+                  }
+                : tab
+            ),
+          };
+        }
+        return {
+          activeTabId: targetTabId,
+          tabs: [
+            ...prev.tabs,
+            {
+              id: targetTabId,
+              filePath: null,
+              content,
+              isDirty: false,
+              remoteFileName: remotePath,
+              isGuide: false,
+            },
+          ],
+        };
+      });
+
+      setCloudBrowserMode(null);
+      setStatusMessage(t.app.statusRemoteOpened(getTabBaseFileName(remotePath, remotePath)));
+      editorRef.current?.activateEditMode();
+    },
+    [activeTab, setCloudBrowserMode, t]
+  );
+
+  const handleSaveCloudTarget = useCallback(
+    async (remotePath: string): Promise<{ ok: boolean; errorText?: string }> => {
+      const targetTabId = activeTab.id;
+      const snapshotContent = activeTab.content;
+      const result = await saveMarkdownToRemote(
+        remoteSettings,
+        remoteCredentials,
+        remotePath,
+        snapshotContent
+      );
+      if (result.ok) {
         setTabsState((prev) => ({
           ...prev,
           tabs: prev.tabs.map((tab) =>
-            tab.id === activeTab.id ? { ...tab, filePath: savedPath, isDirty: false } : tab
+            tab.id === targetTabId
+              ? {
+                  ...tab,
+                  remoteFileName: remotePath,
+                  isDirty: tab.content === snapshotContent ? false : tab.isDirty,
+                  isGuide: false,
+                }
+              : tab
           ),
         }));
-        setStatusMessage(
-          t.app.statusSaved(getTabBaseFileName(savedPath, t.app.untitledFileName))
-        );
+        setCloudBrowserMode(null);
+        setStatusMessage(t.app.statusRemoteSaved(remotePath));
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        errorText: formatRemoteFailureMessage(result),
+      };
+    },
+    [
+      activeTab.content,
+      activeTab.id,
+      formatRemoteFailureMessage,
+      remoteCredentials,
+      remoteSettings,
+      setCloudBrowserMode,
+      t,
+    ]
+  );
+
+  const handleSaveToCloud = useCallback(async () => {
+    if (!ensureRemoteReadyForAction()) {
+      return;
+    }
+
+    const targetPath = activeTab.remoteFileName
+      ? activeTab.remoteFileName
+      : activeTab.filePath
+        ? getTabBaseFileName(activeTab.filePath, t.app.untitledFileName)
+        : null;
+
+    if (!targetPath) {
+      setCloudBrowserMode('save-as');
+      return;
+    }
+
+    const res = await handleSaveCloudTarget(targetPath);
+    if (!res.ok && res.errorText) {
+      setStatusMessage(res.errorText);
+    }
+  }, [
+    activeTab.filePath,
+    activeTab.remoteFileName,
+    ensureRemoteReadyForAction,
+    handleSaveCloudTarget,
+    setCloudBrowserMode,
+    t,
+  ]);
+
+  const handleSaveFile = useCallback(async () => {
+    try {
+      const targetTabId = activeTab.id;
+      const snapshotContent = activeTab.content;
+      const snapshotRemoteFileName = activeTab.remoteFileName;
+      const result = await saveMarkdownFile(targetTabId, activeTab.filePath, snapshotContent);
+      if (!result.canceled && result.filePath) {
+        const savedPath = result.filePath;
+        const savedBaseName = getTabBaseFileName(savedPath, t.app.untitledFileName);
+        setTabsState((prev) => ({
+          ...prev,
+          tabs: prev.tabs.map((tab) =>
+            tab.id === targetTabId
+              ? {
+                  ...tab,
+                  filePath: savedPath,
+                  isDirty: tab.content === snapshotContent ? false : tab.isDirty,
+                  isGuide: false,
+                }
+              : tab
+          ),
+        }));
+
+        if (
+          remoteSettings.enabled &&
+          remoteSettings.endpointUrl.trim() &&
+          remoteSettings.syncWithLocalSave
+        ) {
+          if (isRemoteLocked(remoteSettings, remoteCredentials)) {
+            setStatusMessage(`${t.app.statusSaved(savedBaseName)} / ${t.app.statusRemoteLocked}`);
+            return;
+          }
+          const syncRemotePath = snapshotRemoteFileName || savedBaseName;
+          const remoteRes = await saveMarkdownToRemote(
+            remoteSettings,
+            remoteCredentials,
+            syncRemotePath,
+            snapshotContent
+          );
+          if (remoteRes.ok) {
+            setTabsState((prev) => ({
+              ...prev,
+              tabs: prev.tabs.map((tab) =>
+                tab.id === targetTabId ? { ...tab, remoteFileName: syncRemotePath } : tab
+              ),
+            }));
+            setStatusMessage(
+              `${t.app.statusSaved(savedBaseName)} / ${t.app.statusRemoteSaved(syncRemotePath)}`
+            );
+          } else {
+            setStatusMessage(
+              `${t.app.statusSaved(savedBaseName)} / ${formatRemoteFailureMessage(remoteRes)}`
+            );
+          }
+          return;
+        }
+
+        setStatusMessage(t.app.statusSaved(savedBaseName));
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : t.app.statusSaveError;
       setStatusMessage(msg);
     }
-  }, [activeTab, t]);
+  }, [
+    activeTab.content,
+    activeTab.filePath,
+    activeTab.id,
+    activeTab.remoteFileName,
+    formatRemoteFailureMessage,
+    isRemoteLocked,
+    remoteCredentials,
+    remoteSettings,
+    t,
+  ]);
 
   const handleSaveFileAs = useCallback(async () => {
     try {
-      const result = await saveMarkdownFileAs(activeTab.id, activeTab.content, activeTab.filePath);
+      const targetTabId = activeTab.id;
+      const snapshotContent = activeTab.content;
+      const result = await saveMarkdownFileAs(targetTabId, snapshotContent, activeTab.filePath);
       if (!result.canceled && result.filePath) {
         const savedPath = result.filePath;
         setTabsState((prev) => ({
           ...prev,
           tabs: prev.tabs.map((tab) =>
-            tab.id === activeTab.id ? { ...tab, filePath: savedPath, isDirty: false } : tab
+            tab.id === targetTabId
+              ? {
+                  ...tab,
+                  filePath: savedPath,
+                  isDirty: tab.content === snapshotContent ? false : tab.isDirty,
+                  isGuide: false,
+                }
+              : tab
           ),
         }));
         setStatusMessage(
@@ -330,7 +639,7 @@ export default function App() {
       const msg = err instanceof Error ? err.message : t.app.statusSaveError;
       setStatusMessage(msg);
     }
-  }, [activeTab, t]);
+  }, [activeTab.content, activeTab.filePath, activeTab.id, t]);
 
   const handlePrint = useCallback(() => {
     window.print();
@@ -411,6 +720,22 @@ export default function App() {
         return;
       }
 
+      if (settingsModalOpen) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setSettingsModalOpen(false);
+        }
+        return;
+      }
+
+      if (cloudBrowserMode !== null) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setCloudBrowserMode(null);
+        }
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
@@ -435,7 +760,15 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [mermaidModalOpen, handleOpenFile, handlePrint, handleSaveFile, handleSaveFileAs]);
+  }, [
+    mermaidModalOpen,
+    settingsModalOpen,
+    cloudBrowserMode,
+    handleOpenFile,
+    handlePrint,
+    handleSaveFile,
+    handleSaveFileAs,
+  ]);
 
   useEffect(() => {
     const resetDragState = (): void => {
@@ -578,6 +911,22 @@ export default function App() {
     setMermaidModalOpen(false);
   };
 
+  const cloudInitialTarget = useMemo(() => {
+    if (activeTab.remoteFileName) {
+      const split = splitRemoteRelativePath(activeTab.remoteFileName);
+      return {
+        subPath: split.folderSubPath,
+        fileName: split.fileName || activeDisplayTitle,
+      };
+    }
+    return {
+      subPath: '',
+      fileName: activeTab.filePath
+        ? getTabBaseFileName(activeTab.filePath, t.app.untitledFileName)
+        : activeDisplayTitle,
+    };
+  }, [activeDisplayTitle, activeTab.filePath, activeTab.remoteFileName, t.app.untitledFileName]);
+
   return (
     <div className="app-shell">
       <Toolbar
@@ -594,9 +943,14 @@ export default function App() {
         onOpenFile={() => void handleOpenFile()}
         onSaveFile={() => void handleSaveFile()}
         onSaveFileAs={() => void handleSaveFileAs()}
+        onOpenFromCloud={handleOpenFromCloud}
+        onSaveToCloud={() => void handleSaveToCloud()}
+        onSaveToCloudAs={handleSaveToCloudAs}
         onExportHtml={() => void handleExportHtml()}
         onExportPdf={() => void handleExportPdf()}
         onPrint={handlePrint}
+        onOpenSettings={() => setSettingsModalOpen(true)}
+        onOpenHelp={handleOpenHelpGuide}
         onHeading={(level) => editorRef.current?.applyHeading(level)}
         onBold={() => editorRef.current?.applyBold()}
         onItalic={() => editorRef.current?.applyItalic()}
@@ -643,6 +997,7 @@ export default function App() {
           onEditMermaid={handleEditMermaid}
           editorMode={editorMode}
           onChangeEditorMode={handleChangeEditorMode}
+          tabSize={tabSize}
           activeTabTitle={activeDisplayTitle}
           tabCount={tabs.length}
           isDirty={activeTab.isDirty}
@@ -660,12 +1015,46 @@ export default function App() {
         </div>
       )}
 
-      <MermaidModal
-        isOpen={mermaidModalOpen}
-        initialCode={editingInitialCode}
-        onApply={handleApplyMermaid}
-        onClose={() => setMermaidModalOpen(false)}
-      />
+      <Suspense fallback={null}>
+        {mermaidModalOpen && (
+          <MermaidModal
+            isOpen={mermaidModalOpen}
+            initialCode={editingInitialCode}
+            onApply={handleApplyMermaid}
+            onClose={() => setMermaidModalOpen(false)}
+          />
+        )}
+
+        {settingsModalOpen && (
+          <SettingsModal
+            isOpen={settingsModalOpen}
+            tabSize={tabSize}
+            onChangeTabSize={handleChangeTabSize}
+            remoteSettings={remoteSettings}
+            remoteCredentials={remoteCredentials}
+            hasStoredEncryptedCredentials={hasStoredSecret}
+            isCredentialsUnlocked={isSecretUnlocked}
+            onUnlockCredentials={handleUnlockRemoteCredentials}
+            onClearStoredCredentials={handleClearStoredRemoteCredentials}
+            onSaveSettings={handleSaveSettingsModal}
+            onClose={() => setSettingsModalOpen(false)}
+          />
+        )}
+
+        {cloudBrowserMode !== null && (
+          <CloudBrowserModal
+            isOpen={cloudBrowserMode !== null}
+            mode={cloudBrowserMode}
+            remoteSettings={remoteSettings}
+            remoteCredentials={remoteCredentials}
+            initialSubPath={cloudInitialTarget.subPath}
+            initialFileName={cloudInitialTarget.fileName}
+            onOpenedFile={handleCloudFileOpened}
+            onSaveToPath={handleSaveCloudTarget}
+            onClose={() => setCloudBrowserMode(null)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

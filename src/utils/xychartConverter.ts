@@ -11,7 +11,7 @@ import {
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 export function createDefaultXYChartData(
   lang: 'ja' | 'en' = 'ja'

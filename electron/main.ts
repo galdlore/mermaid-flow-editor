@@ -246,6 +246,94 @@ function registerIpcHandlers(): void {
   ipcMain.handle('file:resetSession', () => {
     authorizedFilePaths.clear();
   });
+
+  ipcMain.handle('remote:request', async (_event, rawPayload: unknown) => {
+    if (typeof rawPayload !== 'object' || rawPayload === null) {
+      return { ok: false, status: 0, statusText: 'Bad Request', error: 'Invalid request payload.' };
+    }
+
+    const payload = rawPayload as Record<string, unknown>;
+    const rawUrl = typeof payload.url === 'string' ? payload.url.trim() : '';
+    if (!isSafeExternalUrl(rawUrl)) {
+      return {
+        ok: false,
+        status: 0,
+        statusText: 'Bad Request',
+        error: 'Only http:// and https:// URLs are allowed.',
+      };
+    }
+
+    const allowedMethods = new Set(['GET', 'PUT', 'POST', 'OPTIONS', 'HEAD', 'PROPFIND', 'MKCOL']);
+    const method = typeof payload.method === 'string' ? payload.method.toUpperCase() : '';
+    if (!allowedMethods.has(method)) {
+      return { ok: false, status: 0, statusText: 'Bad Request', error: 'Unsupported HTTP method.' };
+    }
+
+    const cleanHeaders: Record<string, string> = {};
+    if (typeof payload.headers === 'object' && payload.headers !== null) {
+      for (const [key, val] of Object.entries(payload.headers as Record<string, unknown>)) {
+        if (typeof val === 'string') {
+          cleanHeaders[key] = val;
+        }
+      }
+    }
+
+    const body = typeof payload.body === 'string' ? payload.body : undefined;
+    const readResponseBody = payload.readResponseBody === true;
+    const hasRequestBody = method === 'PUT' || method === 'POST' || method === 'PROPFIND';
+    const maxResponseBytes = 10 * 1024 * 1024;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+
+    try {
+      const response = await fetch(rawUrl, {
+        method,
+        headers: cleanHeaders,
+        body: hasRequestBody ? body : undefined,
+        signal: controller.signal,
+      });
+
+      let bodyText: string | undefined;
+      if (readResponseBody && response.ok) {
+        const contentLength = Number(response.headers.get('content-length') ?? '0');
+        if (Number.isFinite(contentLength) && contentLength > maxResponseBytes) {
+          return {
+            ok: false,
+            status: 413,
+            statusText: 'Payload Too Large',
+            error: 'File size exceeds 10MB limit.',
+          };
+        }
+        const buf = await response.arrayBuffer();
+        if (buf.byteLength > maxResponseBytes) {
+          return {
+            ok: false,
+            status: 413,
+            statusText: 'Payload Too Large',
+            error: 'File size exceeds 10MB limit.',
+          };
+        }
+        bodyText = new TextDecoder('utf-8').decode(buf);
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        bodyText,
+        error: response.ok ? undefined : `HTTP ${response.status} ${response.statusText}`.trim(),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        statusText: 'Network Error',
+        error: err instanceof Error ? err.message : 'Network error',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 }
 
 app.whenReady().then(() => {

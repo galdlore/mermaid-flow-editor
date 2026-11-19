@@ -51,7 +51,7 @@
 <body>
     <main>
         <h1>Privacy Policy for Mermaid Flow Editor</h1>
-        <p class="updated">Last updated: November 15, 2026</p>
+        <p class="updated">Last updated: November 19, 2026</p>
 
         <h2>Overview</h2>
         <p>
@@ -61,34 +61,49 @@
 
         <h2>Data Collection and External Transmission</h2>
         <p>
-            Mermaid Flow Editor does not collect, transmit, store, or share any personal information, browsing history,
-            analytics, or user documents with external servers or third parties.
+            By default, Mermaid Flow Editor does not collect, transmit, store, or share any personal information,
+            browsing history, analytics, or user documents with external servers or third parties.
             All Markdown editing and Mermaid diagram rendering happen locally on your device.
         </p>
+        <p>
+            If you optionally configure a remote save destination (such as your own OpenCloud/WebDAV server or custom
+            HTTP API endpoint) in Settings, the extension communicates directly with the endpoint URL you explicitly
+            entered—only when you trigger a cloud open, directory listing, folder creation, cloud save, connection
+            test, or enable sync-on-save. No telemetry or developer-hosted servers are involved.
+        </p>
 
-        <h2>Local Browser Storage</h2>
+        <h2>Local Browser Storage &amp; Encrypted Credentials</h2>
         <p>To improve usability between sessions, the extension stores the following preferences locally in your browser
             via <code>localStorage</code>:</p>
         <ul>
-            <li>Your current unsaved Markdown draft text</li>
-            <li>Your selected interface language (English or Japanese)</li>
+            <li>Your open Markdown tabs and unsaved draft text</li>
+            <li>Your selected interface language (English or Japanese) and editor mode</li>
             <li>Your preferred Tab indentation size (2 or 4 spaces)</li>
+            <li>Your non-secret remote save endpoint settings (if configured)</li>
         </ul>
         <p>
-            This data remains strictly inside your local browser storage and is never transmitted externally.
-            You can clear it at any time through your browser settings.
+            By default, remote API tokens and passwords are held in memory only and cleared when the tab closes.
+            If you explicitly choose to persist remote credentials across sessions, they are encrypted locally in your
+            browser using AES-256-GCM with a key derived via PBKDF2-SHA256 from a passphrase you supply. The passphrase
+            itself is never stored.
+        </p>
+        <p>
+            All stored data remains strictly inside your local browser storage and can be cleared at any time through
+            the Settings dialog or your browser settings.
         </p>
 
         <h2>Local File Access</h2>
         <p>
-            When you use the Open, Save, or Save As actions, the extension reads from or writes to only the local files
-            you explicitly select through your browser's file picker.
+            When you use the Open, Save, Save As, or Export actions, the extension reads from or writes to only the
+            local files you explicitly select through your browser's file picker or drag onto the editor.
         </p>
 
         <h2>Permissions</h2>
         <p>
-            This extension does not request host permissions to read web pages you visit and does not run background
-            tracking or analytics scripts.
+            This extension does not request broad host permissions to read web pages you visit and does not run
+            background tracking or analytics scripts. Optional host permissions (<code>optional_host_permissions</code>)
+            are requested only at runtime for the specific origin of a remote WebDAV/API destination that you explicitly
+            configure and test or save to.
         </p>
 
         <h2>Changes to This Policy</h2>

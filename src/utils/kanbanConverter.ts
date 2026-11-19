@@ -4,7 +4,7 @@ import type {
   KanbanDiagramData,
   KanbanPriority,
 } from '../types/editor';
-import { sanitizeSafeUrl } from './inputSafeguard';
+import { sanitizeSafeUrl } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   allocateUniqueId,
@@ -13,7 +13,7 @@ import {
   sanitizeSingleLineComment,
   sanitizeYamlSingleQuoted,
   unquoteYamlString,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_PRIORITIES = new Set<KanbanPriority>([
   'Very High',

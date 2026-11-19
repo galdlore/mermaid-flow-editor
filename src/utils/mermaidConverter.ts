@@ -10,13 +10,13 @@ import type {
   MermaidSubgraphData,
   NodeShape,
 } from '../types/editor';
-import { sanitizeCssColor, sanitizeSafeUrl } from './inputSafeguard';
+import { sanitizeCssColor, sanitizeSafeUrl } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_DIRECTIONS: ReadonlyArray<MermaidDirection> = ['TD', 'LR', 'BT', 'RL'];
 const VALID_SHAPES: ReadonlyArray<NodeShape> = [

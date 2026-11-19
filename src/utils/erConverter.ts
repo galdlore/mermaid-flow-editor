@@ -7,7 +7,7 @@ import type {
   ErEntityData,
   ErRelationshipData,
 } from '../types/editor';
-import { sanitizeCssColor } from './inputSafeguard';
+import { sanitizeCssColor } from './inputSafeguard.ts';
 import {
   GUI_STATE_PREFIX,
   allocateUniqueId,
@@ -16,7 +16,7 @@ import {
   sanitizeSingleLineComment,
   sanitizeYamlSingleQuoted,
   unquoteYamlString,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 const VALID_DIRECTIONS = new Set<ErDiagramDirection>(['TB', 'BT', 'LR', 'RL']);
 const VALID_CARDINALITIES = new Set<ErCardinality>([

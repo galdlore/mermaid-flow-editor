@@ -10,7 +10,7 @@ import {
   extractGuiStateJson,
   formatGuiStateLine,
   sanitizeSingleLineComment,
-} from './mermaidEnvelope';
+} from './mermaidEnvelope.ts';
 
 export const DEFAULT_QUADRANT_CONFIG: QuadrantConfigData = {
   chartWidth: 500,

@@ -1,53 +1,107 @@
 import type { Language } from './types';
 
-export const INITIAL_MARKDOWN_JA = `# Mermaid Markdown Editor
+export const INITIAL_MARKDOWN_JA = `# Mermaid Flow Editor 使い方ガイド
 
-上部のツールバーから見出しや表、Mermaid図をGUI操作で挿入できます。
+Mermaid Flow Editorは、Markdown文書と15種類のMermaid図をGUI操作だけで作成・編集できる複数タブ対応エディタです。ツールバー右上の「？」ボタンからいつでもこのガイドを開き直せます。
 
-## 基本的な使い方
+## 1. 2つの編集モードを切り替える
 
-1. 左側の編集エリアに文章を書くか、ツールバーのボタンを押します。
-2. 「Mermaid図をGUI作成」ボタンを押すと、図形と接続先をGUIで組み立てられます。
-3. 右側のプレビュー上にある「この図をGUIで編集」ボタンから、既存の図を何度でも編集し直せます。
+画面上部の切替ボタンから、用途に合わせて2つの編集モードを使い分けられます。
 
-## サンプルフローチャート
+1. 見た目編集モードではMarkdownの記号を手書きせずに、見出しや太字、リスト、引用、表を画面上でそのまま入力できます。
+2. 表の中にカーソルを置くと、右上のヘッダに行や列を増減するGUIボタンが表示されます。
+3. 2ペイン編集モードではMarkdown原文とリアルタイムプレビューを並べて表示でき、リスト行でEnterを押すと次の記号や連番が自動で続きます。
+
+## 2. 15種類のMermaid図をGUIで組み立てる
+
+ツールバーの「Mermaid図をGUI作成」ボタンを押すか、下の図に表示されている「この図をGUIで編集」ボタンを押すと専用エディタが開きます。フローチャートやスイムレーン図をはじめ、ツリービュー、ガントチャート、カンバン、円グラフ、棒・折れ線グラフ、アーキテクチャ図、マインドマップ、四象限チャート、シーケンス図、クラス図、状態遷移図、ER図、C4図を視覚的に編集できます。
 
 \`\`\`mermaid
 flowchart TD
   node_1(["開始"])
   style node_1 fill:#eff6ff,stroke:#475569,color:#0f172a
-  node_2{"条件を確認"}
-  node_3["完了処理"]
+  node_2{"編集方法を選ぶ"}
+  node_3["見た目編集で作成"]
   style node_3 fill:#f0fdf4,stroke:#475569,color:#0f172a
-  node_1 -->|"入力あり"| node_2
-  node_2 -->|"OK"| node_3
-%% @gui-state: {"direction":"TD","nodes":[{"id":"node_1","label":"開始","shape":"stadium","color":"#eff6ff","position":{"x":180,"y":40}},{"id":"node_2","label":"条件を確認","shape":"diamond","color":"#ffffff","position":{"x":185,"y":155}},{"id":"node_3","label":"完了処理","shape":"rect","color":"#f0fdf4","position":{"x":180,"y":310}}],"edges":[{"id":"edge_1","source":"node_1","target":"node_2","label":"入力あり","lineType":"arrow"},{"id":"edge_2","source":"node_2","target":"node_3","label":"OK","lineType":"arrow"}]}
+  node_4["2ペインで調整"]
+  style node_4 fill:#fefce8,stroke:#475569,color:#0f172a
+  node_1 -->|"GUI中心"| node_2
+  node_2 -->|"記号なし"| node_3
+  node_2 -->|"原文も確認"| node_4
+%% @gui-state: {"direction":"TD","nodes":[{"id":"node_1","label":"開始","shape":"stadium","color":"#eff6ff","position":{"x":180,"y":30}},{"id":"node_2","label":"編集方法を選ぶ","shape":"diamond","color":"#ffffff","position":{"x":185,"y":145}},{"id":"node_3","label":"見た目編集で作成","shape":"rect","color":"#f0fdf4","position":{"x":40,"y":290}},{"id":"node_4","label":"2ペインで調整","shape":"rect","color":"#fefce8","position":{"x":310,"y":290}}],"edges":[{"id":"edge_1","source":"node_1","target":"node_2","label":"GUI中心","lineType":"arrow"},{"id":"edge_2","source":"node_2","target":"node_3","label":"記号なし","lineType":"arrow"},{"id":"edge_3","source":"node_2","target":"node_4","label":"原文も確認","lineType":"arrow"}]}
 \`\`\`
+
+## 3. クリックで試せるタスクリスト
+
+見た目編集モードでは、チェックボックスをクリックするだけで完了状態を切り替えられます。
+
+- [x] 「ファイル」メニューから新規作成・開く・保存・HTMLやPDF出力を使う
+- [ ] 右上の歯車アイコンからTabインデント数やOpenCloud/WebDAV保存を設定し、クラウドから開く・別フォルダへ保存する
+- [ ] .mdファイルを画面へドラッグ＆ドロップして新しいタブで開く
+
+## 4. 主なショートカットキー
+
+見た目編集モードで表のセルをクリックすると、行や列の追加・削除ボタンを試せます。
+
+| 操作内容 | キー操作 |
+|---|---|
+| ファイルを開く | Ctrl+O |
+| 上書き保存 | Ctrl+S |
+| 名前を付けて保存 | Ctrl+Shift+S |
+| 印刷またはPDF保存 | Ctrl+P |
+| モーダルを閉じる | Escape |
 `;
 
-export const INITIAL_MARKDOWN_EN = `# Mermaid Markdown Editor
+export const INITIAL_MARKDOWN_EN = `# Mermaid Flow Editor Usage Guide
 
-Use the toolbar above to insert headings, tables, and Mermaid diagrams visually.
+Mermaid Flow Editor is a multi-tab editor for creating Markdown documents and 15 types of Mermaid diagrams visually. Click the "?" help button in the top-right toolbar anytime to reopen this guide.
 
-## Basic Usage
+## 1. Switch Between Visual and Split Modes
 
-1. Write Markdown in the left editor pane or click the formatting buttons in the toolbar.
-2. Click "Create Mermaid Diagram" to build shapes and connections in the visual GUI builder.
-3. Click "Edit Diagram in GUI" on any diagram in the right preview pane to edit it again anytime.
+Use the mode toggle button in the toolbar to pick the editing style you prefer.
 
-## Sample Flowchart
+1. In Visual Mode, write headings, bold text, lists, blockquotes, and tables directly without typing raw Markdown syntax.
+2. Place your cursor inside any table in Visual Mode to reveal row and column controls in the pane header.
+3. In Split Mode, edit raw Markdown side-by-side with a live preview—pressing Enter on bullet, task, or numbered lists automatically continues and renumbers items.
+
+## 2. Build 15 Mermaid Diagram Types Visually
+
+Click "Create Mermaid Diagram" in the toolbar or click "Edit Diagram in GUI" on the diagram below to open the visual builder. You can edit Flowcharts, Swimlane Diagrams, Tree Views, Gantt Charts, Kanban Boards, Pie Charts, XY Charts, Architecture Diagrams, Mindmaps, Quadrant Charts, Sequence Diagrams, Class Diagrams, State Diagrams, ER Diagrams, and C4 Diagrams.
 
 \`\`\`mermaid
 flowchart TD
   node_1(["Start"])
   style node_1 fill:#eff6ff,stroke:#475569,color:#0f172a
-  node_2{"Check condition"}
-  node_3["Complete"]
+  node_2{"Choose Mode"}
+  node_3["Write in Visual GUI"]
   style node_3 fill:#f0fdf4,stroke:#475569,color:#0f172a
-  node_1 -->|"Has input"| node_2
-  node_2 -->|"OK"| node_3
-%% @gui-state: {"direction":"TD","nodes":[{"id":"node_1","label":"Start","shape":"stadium","color":"#eff6ff","position":{"x":180,"y":40}},{"id":"node_2","label":"Check condition","shape":"diamond","color":"#ffffff","position":{"x":185,"y":155}},{"id":"node_3","label":"Complete","shape":"rect","color":"#f0fdf4","position":{"x":180,"y":310}}],"edges":[{"id":"edge_1","source":"node_1","target":"node_2","label":"Has input","lineType":"arrow"},{"id":"edge_2","source":"node_2","target":"node_3","label":"OK","lineType":"arrow"}]}
+  node_4["Refine in Split Mode"]
+  style node_4 fill:#fefce8,stroke:#475569,color:#0f172a
+  node_1 -->|"Flexible"| node_2
+  node_2 -->|"No syntax"| node_3
+  node_2 -->|"Raw Markdown"| node_4
+%% @gui-state: {"direction":"TD","nodes":[{"id":"node_1","label":"Start","shape":"stadium","color":"#eff6ff","position":{"x":180,"y":30}},{"id":"node_2","label":"Choose Mode","shape":"diamond","color":"#ffffff","position":{"x":185,"y":145}},{"id":"node_3","label":"Write in Visual GUI","shape":"rect","color":"#f0fdf4","position":{"x":40,"y":290}},{"id":"node_4","label":"Refine in Split Mode","shape":"rect","color":"#fefce8","position":{"x":310,"y":290}}],"edges":[{"id":"edge_1","source":"node_1","target":"node_2","label":"Flexible","lineType":"arrow"},{"id":"edge_2","source":"node_2","target":"node_3","label":"No syntax","lineType":"arrow"},{"id":"edge_3","source":"node_2","target":"node_4","label":"Raw Markdown","lineType":"arrow"}]}
 \`\`\`
+
+## 3. Interactive Task List
+
+In Visual Mode, click any checkbox directly to toggle its status.
+
+- [x] Use the File menu for New, Open, Save, Open/Save Cloud, and HTML / PDF / Print export
+- [ ] Open Settings (gear icon) to configure Tab indentation or encrypted OpenCloud / WebDAV access
+- [ ] Drag and drop .md files onto the window to open them in new tabs
+
+## 4. Keyboard Shortcuts
+
+Click inside this table in Visual Mode to try adding or removing rows and columns.
+
+| Action | Shortcut |
+|---|---|
+| Open File | Ctrl+O |
+| Save File | Ctrl+S |
+| Save File As | Ctrl+Shift+S |
+| Print / Save as PDF | Ctrl+P |
+| Close Modal / Menu | Escape |
 `;
 
 export function getInitialMarkdownByLang(lang: Language): string {

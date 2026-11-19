@@ -26,3 +26,17 @@ export function writeLocalStorage(key: string, value: string): void {
     // ストレージ容量超過やアクセス拒否は無視する
   }
 }
+
+/** localStorageから安全にキーを削除する */
+export function removeLocalStorage(key: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    if (typeof window.localStorage.removeItem === 'function') {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // アクセス拒否は無視する
+  }
+}
