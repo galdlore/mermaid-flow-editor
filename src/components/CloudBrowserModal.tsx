@@ -5,17 +5,25 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  Link2,
   RefreshCw,
   X,
 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { isSupportedDroppedFileName } from '../utils/documentTabs';
 import {
+  buildMarkdownLink,
+  computeRelativeMarkdownPath,
+  stripMarkdownExtension,
+} from '../utils/markdownLinks';
+import {
+  buildRemoteTargetUrl,
   createRemoteWebdavFolder,
   joinRemoteRelativePath,
   listRemoteWebdavDirectory,
   loadMarkdownFromRemote,
   normalizeRemoteRelativePath,
+  splitRemoteRelativePath,
   type RemoteCredentials,
   type RemoteDirectoryEntry,
   type RemoteRequestResult,
@@ -24,13 +32,16 @@ import {
 
 export interface CloudBrowserModalProps {
   isOpen: boolean;
-  mode: 'open' | 'save-as';
+  mode: 'open' | 'save-as' | 'insert-link';
   remoteSettings: RemoteSaveSettings;
   remoteCredentials: RemoteCredentials;
   initialSubPath: string;
   initialFileName: string;
+  currentRemotePath?: string | null;
+  initialLinkLabel?: string;
   onOpenedFile: (remotePath: string, content: string) => void;
   onSaveToPath: (remotePath: string) => Promise<{ ok: boolean; errorText?: string }>;
+  onInsertLink?: (label: string, href: string) => void;
   onClose: () => void;
 }
 
@@ -54,8 +65,11 @@ export default function CloudBrowserModal({
   remoteCredentials,
   initialSubPath,
   initialFileName,
+  currentRemotePath,
+  initialLinkLabel,
   onOpenedFile,
   onSaveToPath,
+  onInsertLink,
   onClose,
 }: CloudBrowserModalProps) {
   const { t } = useI18n();
@@ -68,6 +82,9 @@ export default function CloudBrowserModal({
   const [filterText, setFilterText] = useState('');
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [fileNameInput, setFileNameInput] = useState('');
+  const [linkFormat, setLinkFormat] = useState<'relative' | 'webdav-url'>('relative');
+  const [linkLabelInput, setLinkLabelInput] = useState('');
+  const [linkLabelEdited, setLinkLabelEdited] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -131,8 +148,12 @@ export default function CloudBrowserModal({
       return;
     }
     const startSubPath = isWebdav ? normalizeRemoteRelativePath(initialSubPath) : '';
+    const trimmedInitialLabel = (initialLinkLabel ?? '').trim();
     setCurrentSubPath(startSubPath);
     setFileNameInput(mode === 'save-as' ? initialFileName : '');
+    setLinkFormat('relative');
+    setLinkLabelInput(trimmedInitialLabel);
+    setLinkLabelEdited(trimmedInitialLabel.length > 0);
     setFilterText('');
     setShowAllFiles(false);
     setNewFolderOpen(false);
@@ -146,14 +167,17 @@ export default function CloudBrowserModal({
     } else {
       setEntries([]);
     }
-  }, [fetchDirectory, initialFileName, initialSubPath, isOpen, isWebdav, mode]);
+  }, [fetchDirectory, initialFileName, initialLinkLabel, initialSubPath, isOpen, isWebdav, mode]);
 
   const navigateToFolder = (nextSubPath: string): void => {
     const normalized = normalizeRemoteRelativePath(nextSubPath);
     setCurrentSubPath(normalized);
     setActionError(null);
-    if (mode === 'open') {
+    if (mode !== 'save-as') {
       setFileNameInput('');
+      if (mode === 'insert-link' && !linkLabelEdited) {
+        setLinkLabelInput('');
+      }
     }
     void fetchDirectory(normalized);
   };
@@ -183,13 +207,49 @@ export default function CloudBrowserModal({
     return joinRemoteRelativePath(currentSubPath, fileNameInput);
   }, [currentSubPath, fileNameInput]);
 
+  const resolveLinkLabelAndHref = useCallback(
+    (targetPath: string): { label: string; href: string } => {
+      const baseName = splitRemoteRelativePath(targetPath).fileName || targetPath;
+      const label =
+        (linkLabelEdited ? linkLabelInput.trim() : '') ||
+        stripMarkdownExtension(baseName) ||
+        targetPath;
+      const href =
+        linkFormat === 'webdav-url'
+          ? buildRemoteTargetUrl(remoteSettings, targetPath)
+          : computeRelativeMarkdownPath(currentRemotePath, targetPath);
+      return { label, href };
+    },
+    [currentRemotePath, linkFormat, linkLabelEdited, linkLabelInput, remoteSettings]
+  );
+
+  const linkPreview = useMemo(() => {
+    if (mode !== 'insert-link' || !resolvedTargetPath) {
+      return '';
+    }
+    const { label, href } = resolveLinkLabelAndHref(resolvedTargetPath);
+    return buildMarkdownLink(label, href, linkFormat === 'webdav-url');
+  }, [linkFormat, mode, resolveLinkLabelAndHref, resolvedTargetPath]);
+
   if (!isOpen) {
     return null;
   }
 
+  const modalTitle =
+    mode === 'open'
+      ? t.cloudBrowser.openTitle
+      : mode === 'save-as'
+        ? t.cloudBrowser.saveAsTitle
+        : t.cloudBrowser.insertLinkTitle;
+
   const executePathAction = async (targetPath: string): Promise<void> => {
     if (!targetPath) {
       setActionError(t.cloudBrowser.fileNameRequired);
+      return;
+    }
+    if (mode === 'insert-link') {
+      const { label, href } = resolveLinkLabelAndHref(targetPath);
+      onInsertLink?.(label, href);
       return;
     }
     setActionError(null);
@@ -245,7 +305,7 @@ export default function CloudBrowserModal({
       className="modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label={mode === 'open' ? t.cloudBrowser.openTitle : t.cloudBrowser.saveAsTitle}
+      aria-label={modalTitle}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -255,7 +315,7 @@ export default function CloudBrowserModal({
       <div className="cloud-browser-modal">
         <div className="modal-header">
           <div className="modal-title-group">
-            <h2>{mode === 'open' ? t.cloudBrowser.openTitle : t.cloudBrowser.saveAsTitle}</h2>
+            <h2>{modalTitle}</h2>
           </div>
           <button
             type="button"
@@ -406,11 +466,14 @@ export default function CloudBrowserModal({
                             navigateToFolder(entry.relativePath);
                           } else {
                             setFileNameInput(entry.name);
+                            if (mode === 'insert-link' && !linkLabelEdited) {
+                              setLinkLabelInput(stripMarkdownExtension(entry.name));
+                            }
                             setActionError(null);
                           }
                         }}
                         onDoubleClick={() => {
-                          if (!entry.isDirectory && mode === 'open') {
+                          if (!entry.isDirectory && (mode === 'open' || mode === 'insert-link')) {
                             void executePathAction(entry.relativePath);
                           }
                         }}
@@ -451,10 +514,52 @@ export default function CloudBrowserModal({
               }}
             />
           </label>
+          {mode === 'insert-link' && (
+            <div className="cloud-link-options-row">
+              <label className="settings-field">
+                <span className="settings-field-label">{t.cloudBrowser.linkLabelField}</span>
+                <input
+                  type="text"
+                  className="settings-input"
+                  value={linkLabelInput}
+                  placeholder={t.cloudBrowser.linkLabelPlaceholder}
+                  onChange={(event) => {
+                    const nextVal = event.target.value;
+                    setLinkLabelInput(nextVal);
+                    setLinkLabelEdited(nextVal.trim().length > 0);
+                  }}
+                />
+              </label>
+              <label className="settings-field">
+                <span className="settings-field-label">{t.cloudBrowser.linkFormatField}</span>
+                <select
+                  className="settings-input"
+                  value={linkFormat}
+                  onChange={(event) =>
+                    setLinkFormat(
+                      event.target.value === 'webdav-url' ? 'webdav-url' : 'relative'
+                    )
+                  }
+                >
+                  <option value="relative">{t.cloudBrowser.linkFormatRelative}</option>
+                  <option value="webdav-url">{t.cloudBrowser.linkFormatWebdavUrl}</option>
+                </select>
+              </label>
+            </div>
+          )}
           <div className="cloud-footer-bottom">
-            <span className="cloud-path-preview">
-              {t.cloudBrowser.targetPathPreviewLabel} /{resolvedTargetPath}
-            </span>
+            {mode === 'insert-link' ? (
+              <span
+                className="cloud-path-preview is-markdown-snippet"
+                title={linkPreview || undefined}
+              >
+                {t.cloudBrowser.linkPreviewLabel} {linkPreview || '-'}
+              </span>
+            ) : (
+              <span className="cloud-path-preview">
+                {t.cloudBrowser.targetPathPreviewLabel} /{resolvedTargetPath}
+              </span>
+            )}
             <div className="cloud-footer-buttons">
               <button type="button" className="btn-secondary" onClick={onClose}>
                 {t.cloudBrowser.cancelBtn}
@@ -464,15 +569,17 @@ export default function CloudBrowserModal({
                 className="btn-primary"
                 disabled={isSubmitting || !fileNameInput.trim()}
               >
-                <Check size={15} />
+                {mode === 'insert-link' ? <Link2 size={15} /> : <Check size={15} />}
                 <span>
                   {mode === 'open'
                     ? isSubmitting
                       ? t.cloudBrowser.openingBtn
                       : t.cloudBrowser.openBtn
-                    : isSubmitting
-                      ? t.cloudBrowser.savingBtn
-                      : t.cloudBrowser.saveBtn}
+                    : mode === 'save-as'
+                      ? isSubmitting
+                        ? t.cloudBrowser.savingBtn
+                        : t.cloudBrowser.saveBtn
+                      : t.cloudBrowser.insertLinkBtn}
                 </span>
               </button>
             </div>

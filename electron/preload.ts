@@ -6,6 +6,21 @@ interface FileOpenResult {
   content?: string;
 }
 
+interface RelativeFileOpenResult {
+  ok: boolean;
+  filePath?: string;
+  content?: string;
+  notFound?: boolean;
+  errorCode?:
+    | 'invalid-path'
+    | 'unauthorized'
+    | 'unsupported-ext'
+    | 'too-large'
+    | 'not-found'
+    | 'read-error';
+  error?: string;
+}
+
 interface FileSaveResult {
   canceled: boolean;
   filePath?: string;
@@ -29,6 +44,7 @@ interface RemoteRequestIpcResult {
 
 interface ElectronBridgeAPI {
   openFile: () => Promise<FileOpenResult>;
+  openRelativeFile: (baseFilePath: string, relativeHref: string) => Promise<RelativeFileOpenResult>;
   saveFile: (filePath: string | null, content: string) => Promise<FileSaveResult>;
   saveFileAs: (content: string) => Promise<FileSaveResult>;
   saveHtmlFile: (content: string, suggestedName?: string) => Promise<FileSaveResult>;
@@ -39,6 +55,8 @@ interface ElectronBridgeAPI {
 
 const electronAPI: ElectronBridgeAPI = {
   openFile: () => ipcRenderer.invoke('file:open') as Promise<FileOpenResult>,
+  openRelativeFile: (baseFilePath: string, relativeHref: string) =>
+    ipcRenderer.invoke('file:openRelative', baseFilePath, relativeHref) as Promise<RelativeFileOpenResult>,
   saveFile: (filePath: string | null, content: string) =>
     ipcRenderer.invoke('file:save', filePath, content) as Promise<FileSaveResult>,
   saveFileAs: (content: string) =>

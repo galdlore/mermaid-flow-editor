@@ -37,6 +37,7 @@ flowchart TD
 
 - [x] 「ファイル」メニューから新規作成・開く・保存・HTMLやPDF出力を使う
 - [ ] 右上の歯車アイコンからTabインデント数やOpenCloud/WebDAV保存を設定し、クラウドから開く・別フォルダへ保存する
+- [ ] 別の.mdファイルへのリンク（2ペインプレビューは通常クリック、見た目編集はCtrl+クリック）でアプリ内の別タブを開き、ツールバーからクラウドファイルへのリンクを挿入する
 - [ ] .mdファイルを画面へドラッグ＆ドロップして新しいタブで開く
 
 ## 4. 主なショートカットキー
@@ -50,6 +51,20 @@ flowchart TD
 | 名前を付けて保存 | Ctrl+Shift+S |
 | 印刷またはPDF保存 | Ctrl+P |
 | モーダルを閉じる | Escape |
+
+## 5. 別のMarkdownファイルへのリンク例
+
+文書内に他の\`.md\`ファイルへのリンクを書いておくと、2ペイン編集のプレビューでは通常のクリック、見た目編集では\`Ctrl+クリック\`（Macは\`Cmd+クリック\`）でアプリ内の新しいタブとして開けます。すでに開いているファイルであればそのタブへ切り替わります。
+
+| リンクの目的 | Markdownの書き方例 |
+|---|---|
+| 同じフォルダ内のファイル（OpenCloud / ローカル共通） | \`[設計書](./design.md)\` |
+| 下のフォルダ内のファイル | \`[API仕様](specs/api.md)\` |
+| 上のフォルダ内のファイル | \`[トップへ戻る](../index.md)\` |
+| OpenCloudのSpaceルート基準 | \`[目次](/docs/index.md)\` |
+| OpenCloudのWebDAVフルURL | \`[別Spaceのメモ](https://cloud.example.com/dav/spaces/<space-id>/memo.md)\` |
+
+ツールバーのリンク挿入ボタンの右にある「クラウドファイルへのリンクを挿入」アイコンを押すと、OpenCloud上のファイル一覧から選ぶだけで相対パスやWebDAVフルURLのリンク記法を自動挿入できます。
 `;
 
 export const INITIAL_MARKDOWN_EN = `# Mermaid Flow Editor Usage Guide
@@ -89,6 +104,7 @@ In Visual Mode, click any checkbox directly to toggle its status.
 
 - [x] Use the File menu for New, Open, Save, Open/Save Cloud, and HTML / PDF / Print export
 - [ ] Open Settings (gear icon) to configure Tab indentation or encrypted OpenCloud / WebDAV access
+- [ ] Click linked .md files (click in Preview or Ctrl+Click in Visual Mode) to open them in new tabs, or insert cloud file links from the toolbar
 - [ ] Drag and drop .md files onto the window to open them in new tabs
 
 ## 4. Keyboard Shortcuts
@@ -102,6 +118,20 @@ Click inside this table in Visual Mode to try adding or removing rows and column
 | Save File As | Ctrl+Shift+S |
 | Print / Save as PDF | Ctrl+P |
 | Close Modal / Menu | Escape |
+
+## 5. Linking to Other Markdown Files
+
+Links to other \`.md\` files open in a new tab inside the app (or switch to the existing tab if already open). Click directly in Split Mode preview, or use \`Ctrl+Click\` (\`Cmd+Click\` on macOS) in Visual Mode.
+
+| Link Target | Markdown Example |
+|---|---|
+| Same folder (OpenCloud & Electron local) | \`[Design Doc](./design.md)\` |
+| Subfolder | \`[API Spec](specs/api.md)\` |
+| Parent folder | \`[Back to Top](../index.md)\` |
+| OpenCloud Space root | \`[Index](/docs/index.md)\` |
+| OpenCloud full WebDAV URL | \`[Cross-Space Note](https://cloud.example.com/dav/spaces/<space-id>/memo.md)\` |
+
+Click the "Insert Link to Cloud File" button next to the Link icon in the toolbar to browse OpenCloud files and insert either a relative path or a full WebDAV URL automatically.
 `;
 
 export function getInitialMarkdownByLang(lang: Language): string {

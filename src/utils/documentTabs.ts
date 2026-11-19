@@ -6,7 +6,10 @@ export interface DocumentTab {
   content: string;
   isDirty: boolean;
   remoteFileName?: string | null;
+  remoteUrl?: string | null;
   isGuide?: boolean;
+  embedFileId?: string | null;
+  embedReadOnly?: boolean;
 }
 
 export interface PersistedTabsState {
@@ -38,6 +41,22 @@ export function getTabBaseFileName(
   return parts[parts.length - 1] || untitledFileName;
 }
 
+/** リモートURLから末尾ファイル名（デコード済み）を取り出す */
+export function getRemoteUrlBaseName(remoteUrl: string, fallback: string): string {
+  const cleanUrl = remoteUrl.trim().split(/[?#]/)[0] ?? '';
+  const withoutTrailingSlash = cleanUrl.replace(/\/+$/, '');
+  const lastSlash = withoutTrailingSlash.lastIndexOf('/');
+  const rawSegment = lastSlash >= 0 ? withoutTrailingSlash.slice(lastSlash + 1) : withoutTrailingSlash;
+  if (!rawSegment) {
+    return fallback;
+  }
+  try {
+    return decodeURIComponent(rawSegment) || fallback;
+  } catch {
+    return rawSegment;
+  }
+}
+
 /** 重複ファイル名に対して拡張子の直前へ連番 (2), (3)... を付与する */
 export function formatDuplicateFileName(fileName: string, suffixNumber: number): string {
   const dotIndex = fileName.lastIndexOf('.');
@@ -51,7 +70,7 @@ export function formatDuplicateFileName(fileName: string, suffixNumber: number):
 
 /** 開いている全タブに対して重複しない表示タイトルを計算する */
 export function computeTabDisplayTitles(
-  tabs: readonly Pick<DocumentTab, 'id' | 'filePath' | 'isGuide' | 'remoteFileName'>[],
+  tabs: readonly Pick<DocumentTab, 'id' | 'filePath' | 'isGuide' | 'remoteFileName' | 'remoteUrl'>[],
   untitledFileName: string,
   guideFileName?: string
 ): Record<string, string> {
@@ -66,6 +85,8 @@ export function computeTabDisplayTitles(
       baseName = guideFileName;
     } else if (tab.remoteFileName) {
       baseName = getTabBaseFileName(tab.remoteFileName, untitledFileName);
+    } else if (tab.remoteUrl) {
+      baseName = getRemoteUrlBaseName(tab.remoteUrl, untitledFileName);
     } else {
       baseName = untitledFileName;
     }
@@ -121,7 +142,14 @@ export function loadPersistedTabsState(
             (item.remoteFileName === undefined ||
               item.remoteFileName === null ||
               typeof item.remoteFileName === 'string') &&
-            (item.isGuide === undefined || typeof item.isGuide === 'boolean')
+            (item.remoteUrl === undefined ||
+              item.remoteUrl === null ||
+              typeof item.remoteUrl === 'string') &&
+            (item.isGuide === undefined || typeof item.isGuide === 'boolean') &&
+            (item.embedFileId === undefined ||
+              item.embedFileId === null ||
+              typeof item.embedFileId === 'string') &&
+            (item.embedReadOnly === undefined || typeof item.embedReadOnly === 'boolean')
         );
 
         if (validTabs.length > 0) {

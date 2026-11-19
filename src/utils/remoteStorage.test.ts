@@ -8,14 +8,17 @@ import {
   createDefaultRemoteSettings,
   createRemoteWebdavFolder,
   hasEncryptedCredentials,
+  isSameOriginAsEndpoint,
   joinRemoteRelativePath,
   listRemoteWebdavDirectory,
   loadMarkdownFromRemote,
+  loadMarkdownFromRemoteUrl,
   loadRemoteSettings,
   normalizeRemoteRelativePath,
   parseWebdavPropfindXml,
   saveEncryptedCredentials,
   saveMarkdownToRemote,
+  saveMarkdownToRemoteUrl,
   saveRemoteSettings,
   splitRemoteRelativePath,
   testRemoteConnection,
@@ -377,9 +380,15 @@ test('remoteStorage network operations handle 200/207/201, 401, 405 fallbacks, 4
     assert.equal(calls[calls.length - 1].headers.Authorization, 'Bearer tok-xyz');
     assert.equal(calls[calls.length - 1].body, JSON.stringify({ fileName: 'doc.md', content: '# Hi' }));
 
-    const testWebdavFallback = await testRemoteConnection(baseSettings, creds);
-    assert.equal(testWebdavFallback.ok, true);
-    assert.equal(testWebdavFallback.status, 207);
+    const testWebdavResult = await testRemoteConnection(baseSettings, creds);
+    assert.equal(testWebdavResult.ok, true);
+    assert.equal(testWebdavResult.status, 207);
+
+    const testWrongPathResult = await testRemoteConnection(
+      { ...baseSettings, endpointUrl: 'https://cloud.example.com/dav/missing/' },
+      creds
+    );
+    assert.equal(testWrongPathResult.ok, false);
 
     const testCustomFallback = await testRemoteConnection(customSettings, bearerCreds);
     assert.equal(testCustomFallback.ok, true);
@@ -392,6 +401,111 @@ test('remoteStorage network operations handle 200/207/201, 401, 405 fallbacks, 4
     const netErr = await listRemoteWebdavDirectory(baseSettings, creds, '');
     assert.equal(netErr.ok, false);
     assert.equal(netErr.isCorsOrNetworkError, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('isSameOriginAsEndpoint, loadMarkdownFromRemoteUrl, and saveMarkdownToRemoteUrl enforce same-origin', async () => {
+  assert.equal(
+    isSameOriginAsEndpoint(
+      'https://cloud.example.com/dav/spaces/other/doc.md',
+      'https://cloud.example.com/dav/spaces/main/'
+    ),
+    true
+  );
+  assert.equal(
+    isSameOriginAsEndpoint(
+      'https://evil.example.com/dav/spaces/other/doc.md',
+      'https://cloud.example.com/dav/spaces/main/'
+    ),
+    false
+  );
+  assert.equal(
+    isSameOriginAsEndpoint('/dav/spaces/other/doc.md', '/dav/spaces/main/'),
+    true
+  );
+  assert.equal(
+    isSameOriginAsEndpoint(
+      'https://app.example.com/dav/spaces/other/doc.md',
+      '/dav/spaces/main/',
+      'https://app.example.com'
+    ),
+    true
+  );
+  assert.equal(
+    isSameOriginAsEndpoint('//evil.example.com/dav/doc.md', 'https://cloud.example.com/dav/'),
+    false
+  );
+
+  const originalFetch = globalThis.fetch;
+  const fetchCalls: Array<{ url: string; method: string; auth?: string; body?: string }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    fetchCalls.push({
+      url,
+      method,
+      auth: headers.Authorization,
+      body: typeof init?.body === 'string' ? init.body : undefined,
+    });
+    if (method === 'GET') {
+      return new Response('# Cross Space', { status: 200, statusText: 'OK' });
+    }
+    return new Response(null, { status: 204, statusText: 'No Content' });
+  }) as typeof fetch;
+
+  try {
+    const settings = {
+      ...createDefaultRemoteSettings(),
+      enabled: true,
+      protocol: 'webdav' as const,
+      endpointUrl: 'https://cloud.example.com/dav/spaces/main/',
+      authType: 'basic' as const,
+    };
+    const creds = { username: 'koji', password: 'secret', bearerToken: '' };
+
+    const blockedRead = await loadMarkdownFromRemoteUrl(
+      settings,
+      creds,
+      'https://attacker.example.com/dav/spaces/other/leak.md'
+    );
+    assert.equal(blockedRead.ok, false);
+    assert.equal(fetchCalls.length, 0);
+
+    const blockedWrite = await saveMarkdownToRemoteUrl(
+      settings,
+      creds,
+      'https://attacker.example.com/dav/spaces/other/leak.md',
+      '# x'
+    );
+    assert.equal(blockedWrite.ok, false);
+    assert.equal(fetchCalls.length, 0);
+
+    const readOk = await loadMarkdownFromRemoteUrl(
+      settings,
+      creds,
+      'https://cloud.example.com/dav/spaces/other/%E8%A8%AD%E8%A8%88%20v1.md#top'
+    );
+    assert.equal(readOk.ok, true);
+    assert.equal(readOk.fileName, '設計 v1.md');
+    assert.equal(readOk.content, '# Cross Space');
+    assert.equal(
+      fetchCalls[0].url,
+      'https://cloud.example.com/dav/spaces/other/%E8%A8%AD%E8%A8%88%20v1.md'
+    );
+    assert.ok(fetchCalls[0].auth?.startsWith('Basic '));
+
+    const writeOk = await saveMarkdownToRemoteUrl(
+      settings,
+      creds,
+      'https://cloud.example.com/dav/spaces/other/doc.md',
+      '# Updated'
+    );
+    assert.equal(writeOk.ok, true);
+    assert.equal(fetchCalls[1].method, 'PUT');
+    assert.equal(fetchCalls[1].body, '# Updated');
   } finally {
     globalThis.fetch = originalFetch;
   }

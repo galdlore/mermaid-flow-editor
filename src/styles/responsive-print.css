@@ -183,6 +183,14 @@
     align-items: stretch;
   }
 
+  .cloud-link-options-row {
+    grid-template-columns: 1fr;
+  }
+
+  .wysiwyg-link-hint {
+    display: none;
+  }
+
   .cloud-footer-buttons {
     justify-content: flex-end;
   }

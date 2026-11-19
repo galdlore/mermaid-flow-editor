@@ -760,6 +760,137 @@ export async function listRemoteWebdavDirectory(
   };
 }
 
+/** 設定されたエンドポイントと同じオリジン（または同一オリジン相対パス）かを判定する */
+export function isSameOriginAsEndpoint(
+  targetUrl: string,
+  endpointUrl: string,
+  baseOrigin?: string
+): boolean {
+  const cleanTarget = targetUrl.trim();
+  const cleanEndpoint = endpointUrl.trim();
+  if (!cleanTarget || !cleanEndpoint) {
+    return false;
+  }
+  if (cleanTarget.startsWith('//') || cleanEndpoint.startsWith('//')) {
+    return false;
+  }
+
+  const effectiveBaseOrigin =
+    baseOrigin ?? (typeof window !== 'undefined' ? window.location?.origin : undefined);
+
+  if (cleanEndpoint.startsWith('/')) {
+    if (cleanTarget.startsWith('/')) {
+      return true;
+    }
+    try {
+      const parsedTarget = new URL(cleanTarget);
+      if (parsedTarget.protocol !== 'https:' && parsedTarget.protocol !== 'http:') {
+        return false;
+      }
+      return Boolean(effectiveBaseOrigin) && parsedTarget.origin === effectiveBaseOrigin;
+    } catch {
+      return false;
+    }
+  }
+
+  let parsedEndpoint: URL;
+  try {
+    parsedEndpoint = new URL(cleanEndpoint);
+  } catch {
+    return false;
+  }
+  if (parsedEndpoint.protocol !== 'https:' && parsedEndpoint.protocol !== 'http:') {
+    return false;
+  }
+
+  if (cleanTarget.startsWith('/')) {
+    return Boolean(effectiveBaseOrigin) && effectiveBaseOrigin === parsedEndpoint.origin;
+  }
+
+  try {
+    const parsedTarget = new URL(cleanTarget);
+    if (parsedTarget.protocol !== 'https:' && parsedTarget.protocol !== 'http:') {
+      return false;
+    }
+    return parsedTarget.origin === parsedEndpoint.origin;
+  } catch {
+    return false;
+  }
+}
+
+function stripUrlQueryAndHash(rawUrl: string): string {
+  return (rawUrl.trim().split(/[?#]/)[0] ?? '').trim();
+}
+
+function extractFileNameFromCleanUrl(cleanUrl: string): string {
+  const withoutTrailing = cleanUrl.replace(/\/+$/, '');
+  const lastSlash = withoutTrailing.lastIndexOf('/');
+  const rawSeg = lastSlash >= 0 ? withoutTrailing.slice(lastSlash + 1) : withoutTrailing;
+  return (rawSeg ? safeDecodeUriSegment(rawSeg) : '') || 'document.md';
+}
+
+/** 設定されたエンドポイントと同一オリジンのWebDAVフルURLからMarkdown/テキストファイルを読み込む */
+export async function loadMarkdownFromRemoteUrl(
+  settings: RemoteSaveSettings,
+  creds: RemoteCredentials,
+  targetUrl: string,
+  baseOrigin?: string
+): Promise<RemoteReadResult> {
+  const cleanUrl = stripUrlQueryAndHash(targetUrl);
+  const fileName = extractFileNameFromCleanUrl(cleanUrl);
+  if (!cleanUrl || !isSameOriginAsEndpoint(cleanUrl, settings.endpointUrl, baseOrigin)) {
+    return {
+      ok: false,
+      status: 0,
+      statusText: 'Forbidden',
+      targetUrl: cleanUrl,
+      remotePath: '',
+      fileName,
+      error: 'Target URL origin does not match configured cloud endpoint.',
+    };
+  }
+
+  const authHeaders = buildAuthHeaders(settings.authType, creds);
+  const res = await executeRemoteRequest(cleanUrl, 'GET', authHeaders, undefined, true);
+  return {
+    ...res,
+    remotePath: '',
+    fileName,
+    content: res.ok ? (res.bodyText ?? '') : undefined,
+  };
+}
+
+/** 設定されたエンドポイントと同一オリジンのWebDAVフルURLへMarkdownを書き込む */
+export async function saveMarkdownToRemoteUrl(
+  settings: RemoteSaveSettings,
+  creds: RemoteCredentials,
+  targetUrl: string,
+  content: string,
+  baseOrigin?: string
+): Promise<RemoteRequestResult> {
+  const cleanUrl = stripUrlQueryAndHash(targetUrl);
+  if (!cleanUrl || !isSameOriginAsEndpoint(cleanUrl, settings.endpointUrl, baseOrigin)) {
+    return {
+      ok: false,
+      status: 0,
+      statusText: 'Forbidden',
+      targetUrl: cleanUrl,
+      error: 'Target URL origin does not match configured cloud endpoint.',
+    };
+  }
+
+  const authHeaders = buildAuthHeaders(settings.authType, creds);
+  return executeRemoteRequest(
+    cleanUrl,
+    'PUT',
+    {
+      ...authHeaders,
+      'Content-Type': 'text/markdown; charset=utf-8',
+    },
+    content
+  );
+}
+
 /** リモート保存先からMarkdown/テキストファイルを読み込む */
 export async function loadMarkdownFromRemote(
   settings: RemoteSaveSettings,
@@ -801,17 +932,22 @@ export async function testRemoteConnection(
   const authHeaders = buildAuthHeaders(settings.authType, creds);
 
   if (settings.protocol === 'webdav') {
-    const optionsRes = await executeRemoteRequest(baseClean, 'OPTIONS', authHeaders);
-    if (optionsRes.ok || optionsRes.status === 401 || optionsRes.status === 403 || optionsRes.status === 0) {
-      return optionsRes;
-    }
-    if (optionsRes.status === 405) {
-      return executeRemoteRequest(baseClean, 'PROPFIND', {
+    const folderUrl = buildRemoteFolderUrl(baseClean, '');
+    const propfindRes = await executeRemoteRequest(
+      folderUrl,
+      'PROPFIND',
+      {
         ...authHeaders,
         Depth: '0',
-      });
+        'Content-Type': 'application/xml; charset=utf-8',
+      },
+      PROPFIND_REQUEST_XML,
+      false
+    );
+    if (propfindRes.status === 405) {
+      return executeRemoteRequest(folderUrl, 'OPTIONS', authHeaders);
     }
-    return optionsRes;
+    return propfindRes;
   }
 
   const optionsRes = await executeRemoteRequest(baseClean, 'OPTIONS', authHeaders);

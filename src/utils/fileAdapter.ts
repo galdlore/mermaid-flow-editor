@@ -1,4 +1,4 @@
-import type { FileOpenResult, FileSaveResult } from '../types/editor';
+import type { FileOpenResult, FileSaveResult, RelativeFileOpenResult } from '../types/editor';
 import { isSupportedDroppedFileName } from './documentTabs';
 
 interface BrowserFileWritable {
@@ -298,6 +298,21 @@ export async function openMarkdownFile(): Promise<BrowserFileOpenResult> {
     }
     throw err;
   }
+}
+
+/** Electron版で許可済みの親ファイルパスを基準に相対パスのMarkdownファイルを読み込む */
+export async function openRelativeMarkdownFile(
+  baseFilePath: string,
+  relativeHref: string
+): Promise<RelativeFileOpenResult> {
+  if (!window.electronAPI?.openRelativeFile) {
+    return {
+      ok: false,
+      errorCode: 'unauthorized',
+      error: 'Unavailable outside desktop app.',
+    };
+  }
+  return window.electronAPI.openRelativeFile(baseFilePath, relativeHref);
 }
 
 /** 実行環境に応じてElectronまたはブラウザAPIで別名保存を行う */

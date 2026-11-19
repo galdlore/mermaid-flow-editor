@@ -1,5 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type FileFilter } from 'electron';
-import { readFile, writeFile } from 'node:fs/promises';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type FileFilter } from 'electron';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 let mainWindow: BrowserWindow | null = null;
@@ -40,6 +40,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     title: 'Mermaid Markdown Editor',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -47,6 +48,10 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  if (process.platform !== 'darwin') {
+    mainWindow.removeMenu();
+  }
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) {
@@ -177,6 +182,55 @@ async function savePdfWithDialog(
   return { canceled: false, filePath: resolvedPath };
 }
 
+const SUPPORTED_RELATIVE_EXTENSIONS = new Set(['.md', '.markdown', '.txt']);
+const MAX_RELATIVE_FILE_BYTES = 10 * 1024 * 1024;
+
+function parseSafeRelativeSegments(rawRelativeHref: string): string[] | null {
+  const trimmed = rawRelativeHref.trim();
+  if (!trimmed || trimmed.includes('\0')) {
+    return null;
+  }
+  const hashIndex = trimmed.indexOf('#');
+  const beforeHash = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+  const queryIndex = beforeHash.indexOf('?');
+  const cleanHref = (queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash).trim();
+
+  if (
+    !cleanHref ||
+    cleanHref.startsWith('/') ||
+    cleanHref.startsWith('\\') ||
+    /^[a-zA-Z]:/.test(cleanHref) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(cleanHref)
+  ) {
+    return null;
+  }
+
+  const decodedSegments: string[] = [];
+  for (const rawSeg of cleanHref.split('/')) {
+    if (!rawSeg) {
+      continue;
+    }
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(rawSeg);
+    } catch {
+      return null;
+    }
+    if (
+      !decoded ||
+      decoded.includes('\0') ||
+      decoded.includes('/') ||
+      decoded.includes('\\') ||
+      /^[a-zA-Z]:/.test(decoded)
+    ) {
+      return null;
+    }
+    decodedSegments.push(decoded);
+  }
+
+  return decodedSegments.length > 0 ? decodedSegments : null;
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle('file:open', async () => {
     const options = {
@@ -198,6 +252,92 @@ function registerIpcHandlers(): void {
     authorizedFilePaths.add(resolvedPath);
     return { canceled: false, filePath: resolvedPath, content };
   });
+
+  ipcMain.handle(
+    'file:openRelative',
+    async (_event, rawBaseFilePath: unknown, rawRelativeHref: unknown) => {
+      if (
+        typeof rawBaseFilePath !== 'string' ||
+        !rawBaseFilePath.trim() ||
+        typeof rawRelativeHref !== 'string' ||
+        !rawRelativeHref.trim()
+      ) {
+        return {
+          ok: false,
+          errorCode: 'invalid-path',
+          error: 'Invalid path arguments.',
+        };
+      }
+
+      const resolvedBase = normalizeAuthorizedPath(rawBaseFilePath);
+      if (!authorizedFilePaths.has(resolvedBase)) {
+        return {
+          ok: false,
+          errorCode: 'unauthorized',
+          error: 'Base file is not authorized.',
+        };
+      }
+
+      const segments = parseSafeRelativeSegments(rawRelativeHref);
+      if (!segments) {
+        return {
+          ok: false,
+          errorCode: 'invalid-path',
+          error: 'Only relative paths are allowed.',
+        };
+      }
+
+      const targetPath = normalizeAuthorizedPath(
+        path.resolve(path.dirname(resolvedBase), ...segments)
+      );
+      const ext = path.extname(targetPath).toLowerCase();
+      if (!SUPPORTED_RELATIVE_EXTENSIONS.has(ext)) {
+        return {
+          ok: false,
+          errorCode: 'unsupported-ext',
+          error: 'Only .md, .markdown, and .txt files can be opened.',
+        };
+      }
+
+      try {
+        const stats = await stat(targetPath);
+        if (!stats.isFile()) {
+          return {
+            ok: false,
+            notFound: true,
+            errorCode: 'not-found',
+            error: 'Target is not a file.',
+          };
+        }
+        if (stats.size > MAX_RELATIVE_FILE_BYTES) {
+          return {
+            ok: false,
+            errorCode: 'too-large',
+            error: 'File size exceeds 10MB limit.',
+          };
+        }
+
+        const content = await readFile(targetPath, 'utf-8');
+        authorizedFilePaths.add(targetPath);
+        return { ok: true, filePath: targetPath, content };
+      } catch (err) {
+        const errCode = (err as NodeJS.ErrnoException | null)?.code;
+        if (errCode === 'ENOENT' || errCode === 'ENOTDIR') {
+          return {
+            ok: false,
+            notFound: true,
+            errorCode: 'not-found',
+            error: 'Linked file not found.',
+          };
+        }
+        return {
+          ok: false,
+          errorCode: 'read-error',
+          error: err instanceof Error ? err.message : 'Failed to read linked file.',
+        };
+      }
+    }
+  );
 
   ipcMain.handle('file:save', async (_event, filePath: unknown, content: unknown) => {
     if (typeof content !== 'string') {
@@ -337,6 +477,9 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(() => {
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null);
+  }
   registerIpcHandlers();
   createWindow();
 

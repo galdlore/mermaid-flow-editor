@@ -21,6 +21,7 @@ import {
   type TabSizeOption,
 } from '../utils/markdownTabIndent';
 import { computeListContinueEdit } from '../utils/markdownListContinue';
+import { buildMarkdownLink, formatMarkdownLinkDestination } from '../utils/markdownLinks';
 import { extractMermaidBlocks } from '../utils/markdownMermaidBlocks';
 import { extractCleanPreviewHtml } from '../utils/htmlExport';
 
@@ -59,6 +60,8 @@ export interface MarkdownEditorHandle {
   applyCodeBlock: () => void;
   insertTable: (rows: number, cols: number) => void;
   insertMermaidBlock: (code: string) => void;
+  insertLink: (label: string, href: string, isPreEncodedUrl?: boolean) => void;
+  getSelectedText: () => string;
   insertAtCursor: (text: string) => void;
   wrapSelection: (prefix: string, suffix: string, placeholder: string) => void;
   insertLinePrefix: (prefix: string) => void;
@@ -70,6 +73,8 @@ export interface MarkdownEditorProps {
   value: string;
   onChange: (nextValue: string) => void;
   onEditMermaid: (blockIndex: number, code: string) => void;
+  onOpenMarkdownLink?: (href: string) => void;
+  isDocumentLink?: (href: string) => boolean;
   editorMode: 'wysiwyg' | 'split';
   onChangeEditorMode: (nextMode: 'wysiwyg' | 'split') => void;
   tabSize: TabSizeOption;
@@ -148,6 +153,8 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       value,
       onChange,
       onEditMermaid,
+      onOpenMarkdownLink,
+      isDocumentLink,
       editorMode,
       onChangeEditorMode,
       tabSize,
@@ -343,6 +350,30 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
           }
           insertAtTextareaCursor(`\n\`\`\`mermaid\n${code}\n\`\`\`\n`);
         },
+        insertLink(label: string, href: string, isPreEncodedUrl?: boolean) {
+          if (isWysiwygActive()) {
+            wysiwygRef.current?.insertLink(
+              label,
+              formatMarkdownLinkDestination(href, isPreEncodedUrl)
+            );
+            return;
+          }
+          insertAtTextareaCursor(buildMarkdownLink(label, href, isPreEncodedUrl));
+        },
+        getSelectedText() {
+          if (isWysiwygActive()) {
+            return wysiwygRef.current?.getSelectedText() ?? '';
+          }
+          const textarea = textareaRef.current;
+          if (!textarea) {
+            return '';
+          }
+          const { selectionStart, selectionEnd } = textarea;
+          if (selectionStart === selectionEnd) {
+            return '';
+          }
+          return value.slice(selectionStart, selectionEnd).trim();
+        },
         insertAtCursor(text: string) {
           if (isWysiwygActive()) {
             wysiwygRef.current?.insertText(text);
@@ -501,6 +532,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             value={value}
             onChange={onChange}
             onEditMermaid={onEditMermaid}
+            onOpenMarkdownLink={onOpenMarkdownLink}
           />
         )}
         <section className="editor-pane-left">
@@ -526,6 +558,47 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
+                  a({ node: _node, href, children, className, title, onClick, ...rest }) {
+                    const rawHref = typeof href === 'string' ? href : '';
+                    const isInAppDocLink = rawHref ? (isDocumentLink?.(rawHref) ?? false) : false;
+                    const isExternalHttp = !isInAppDocLink && /^https?:\/\//i.test(rawHref);
+                    const isHashAnchor = rawHref.startsWith('#');
+                    const combinedClassName = isInAppDocLink
+                      ? [className, 'markdown-doc-link'].filter(Boolean).join(' ')
+                      : className;
+
+                    return (
+                      <a
+                        {...rest}
+                        href={rawHref || undefined}
+                        className={combinedClassName}
+                        target={isExternalHttp ? '_blank' : undefined}
+                        rel={isExternalHttp ? 'noopener noreferrer' : undefined}
+                        title={isInAppDocLink ? t.editor.openLinkedDocTitle : title}
+                        onClick={(event) => {
+                          onClick?.(event);
+                          if (!rawHref) {
+                            event.preventDefault();
+                            return;
+                          }
+                          if (isHashAnchor) {
+                            return;
+                          }
+                          if (isInAppDocLink && onOpenMarkdownLink) {
+                            event.preventDefault();
+                            onOpenMarkdownLink(rawHref);
+                            return;
+                          }
+                          if (!isExternalHttp) {
+                            event.preventDefault();
+                            onOpenMarkdownLink?.(rawHref);
+                          }
+                        }}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
                   pre({ children }) {
                     if (isMermaidPreChild(children)) {
                       return <div className="mermaid-pre-container">{children}</div>;

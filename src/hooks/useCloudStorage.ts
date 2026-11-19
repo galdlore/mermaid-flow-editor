@@ -14,6 +14,8 @@ import {
   type RemoteSaveSettings,
 } from '../utils/remoteStorage';
 
+export type CloudBrowserMode = 'open' | 'save-as' | 'insert-link';
+
 interface UseCloudStorageOptions {
   t: TranslationCatalog;
   onStatusMessage: (message: string | null) => void;
@@ -21,7 +23,7 @@ interface UseCloudStorageOptions {
 
 export function useCloudStorage({ t, onStatusMessage }: UseCloudStorageOptions) {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [cloudBrowserMode, setCloudBrowserMode] = useState<'open' | 'save-as' | null>(null);
+  const [cloudBrowserMode, setCloudBrowserMode] = useState<CloudBrowserMode | null>(null);
   const [remoteSettings, setRemoteSettings] = useState<RemoteSaveSettings>(() =>
     loadRemoteSettings()
   );
@@ -107,7 +109,7 @@ export function useCloudStorage({ t, onStatusMessage }: UseCloudStorageOptions) 
   }, [isRemoteLocked, onStatusMessage, remoteCredentials, remoteSettings, t]);
 
   const openCloudBrowser = useCallback(
-    (mode: 'open' | 'save-as') => {
+    (mode: CloudBrowserMode) => {
       if (!ensureRemoteReadyForAction()) {
         return;
       }

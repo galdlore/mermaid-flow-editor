@@ -72,6 +72,17 @@ export interface TranslationCatalog {
     statusRemoteLocked: string;
     statusRemoteCorsHint: string;
     statusRemotePermissionDenied: string;
+    statusSwitchedExistingTab: (fileName: string) => string;
+    statusCloudLinkInserted: (label: string) => string;
+    statusLinkedFileNotFound: (fileName: string) => string;
+    statusLinkedFileOpenError: (detail: string) => string;
+    statusLinkedLocalRequiresOpen: string;
+    statusLinkedLocalRequiresSave: string;
+    statusLinkedLocalBrowserUnsupported: string;
+    statusEmbedOriginMissing: string;
+    statusEmbedReadOnly: string;
+    statusEmbedSaveError: (detail: string) => string;
+    statusEmbedTimeout: string;
     statusDroppedOpened: (count: number, firstFileName: string) => string;
     statusDroppedUnsupported: string;
     statusDropError: string;
@@ -126,6 +137,7 @@ export interface TranslationCatalog {
     strikePlaceholder: string;
     linkTitle: string;
     linkPlaceholder: string;
+    cloudLinkTitle: string;
     bulletListTitle: string;
     orderedListTitle: string;
     taskListTitle: string;
@@ -168,6 +180,8 @@ export interface TranslationCatalog {
     tableDeleteCol: string;
     tabSizeLabel: string;
     tabSpacesOption: (count: number) => string;
+    openLinkedDocTitle: string;
+    wysiwygLinkHint: string;
   };
   modal: {
     ariaLabel: string;
@@ -1100,6 +1114,7 @@ export interface TranslationCatalog {
   cloudBrowser: {
     openTitle: string;
     saveAsTitle: string;
+    insertLinkTitle: string;
     closeAria: string;
     rootLabel: string;
     upFolderBtn: string;
@@ -1117,12 +1132,19 @@ export interface TranslationCatalog {
     listFallbackHint: string;
     fileNameField: string;
     fileNamePlaceholder: string;
+    linkLabelField: string;
+    linkLabelPlaceholder: string;
+    linkFormatField: string;
+    linkFormatRelative: string;
+    linkFormatWebdavUrl: string;
+    linkPreviewLabel: string;
     targetPathPreviewLabel: string;
     fileNameRequired: string;
     openBtn: string;
     openingBtn: string;
     saveBtn: string;
     savingBtn: string;
+    insertLinkBtn: string;
     cancelBtn: string;
   };
 }

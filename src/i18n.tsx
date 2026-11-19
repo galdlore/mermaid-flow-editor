@@ -10,6 +10,7 @@ import {
 import { enCatalog } from './locales/en';
 import { jaCatalog } from './locales/ja';
 import type { Language, TranslationCatalog } from './locales/types';
+import { parseEmbedConfig } from './utils/embedBridge';
 import { readLocalStorage, writeLocalStorage } from './utils/storage';
 
 export type { Language, TranslationCatalog } from './locales/types';
@@ -22,6 +23,13 @@ export {
 export const LANG_STORAGE_KEY = 'mermaid-flow-editor:lang';
 
 export function detectInitialLanguage(): Language {
+  if (typeof window !== 'undefined') {
+    const embedConfig = parseEmbedConfig(window.location?.search ?? '');
+    if (embedConfig.enabled && embedConfig.initialLang) {
+      return embedConfig.initialLang;
+    }
+  }
+
   const saved = readLocalStorage(LANG_STORAGE_KEY);
   if (saved === 'ja' || saved === 'en') {
     return saved;
@@ -50,11 +58,19 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(detectInitialLanguage);
+  const isEmbedMode = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return parseEmbedConfig(window.location?.search ?? '').enabled;
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = lang;
-    writeLocalStorage(LANG_STORAGE_KEY, lang);
-  }, [lang]);
+    if (!isEmbedMode) {
+      writeLocalStorage(LANG_STORAGE_KEY, lang);
+    }
+  }, [isEmbedMode, lang]);
 
   const setLang = useCallback((nextLang: Language) => {
     setLangState(nextLang);

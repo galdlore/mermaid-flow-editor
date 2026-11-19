@@ -196,4 +196,125 @@ describe('CloudBrowserModal', () => {
       expect(onOpenedFile).toHaveBeenCalledWith('direct/readme.md', '# Direct Open');
     });
   });
+
+  it('inserts relative paths, WebDAV full URLs, double-click selections, and preserves custom labels in insert-link mode', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'PROPFIND' && url.endsWith('/dav/notes/')) {
+        return new Response(
+          `<d:multistatus xmlns:d="DAV:">
+            <d:response><d:href>/dav/notes/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+            <d:response><d:href>/dav/notes/plan.md</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>10</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+            <d:response><d:href>/dav/notes/api.md</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>20</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+          </d:multistatus>`,
+          { status: 207 }
+        );
+      }
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+
+    const onInsertLink = vi.fn();
+    const { rerender } = render(
+      <I18nProvider>
+        <CloudBrowserModal
+          isOpen
+          mode="insert-link"
+          remoteSettings={{
+            ...createDefaultRemoteSettings(),
+            enabled: true,
+            endpointUrl: 'https://cloud.example.com/dav/',
+            authType: 'none',
+          }}
+          remoteCredentials={{ username: '', password: '', bearerToken: '' }}
+          initialSubPath="notes"
+          initialFileName="index.md"
+          currentRemotePath="notes/index.md"
+          onOpenedFile={vi.fn()}
+          onSaveToPath={vi.fn().mockResolvedValue({ ok: true })}
+          onInsertLink={onInsertLink}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    );
+
+    const planOption = await screen.findByRole('option', { name: /plan\.md/ });
+    const apiOption = screen.getByRole('option', { name: /api\.md/ });
+
+    fireEvent.click(planOption);
+    expect(screen.getByLabelText('リンク表示名')).toHaveValue('plan');
+    expect(screen.getByText('挿入プレビュー [plan](./plan.md)')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('リンク形式'), {
+      target: { value: 'webdav-url' },
+    });
+    expect(
+      screen.getByText('挿入プレビュー [plan](https://cloud.example.com/dav/notes/plan.md)')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'リンクを挿入' }));
+    expect(onInsertLink).toHaveBeenCalledWith(
+      'plan',
+      'https://cloud.example.com/dav/notes/plan.md'
+    );
+
+    fireEvent.change(screen.getByLabelText('リンク形式'), {
+      target: { value: 'relative' },
+    });
+    fireEvent.doubleClick(apiOption);
+    expect(onInsertLink).toHaveBeenLastCalledWith('api', './api.md');
+
+    rerender(
+      <I18nProvider>
+        <CloudBrowserModal
+          isOpen={false}
+          mode="insert-link"
+          remoteSettings={{
+            ...createDefaultRemoteSettings(),
+            enabled: true,
+            endpointUrl: 'https://cloud.example.com/dav/',
+            authType: 'none',
+          }}
+          remoteCredentials={{ username: '', password: '', bearerToken: '' }}
+          initialSubPath="notes"
+          initialFileName="index.md"
+          currentRemotePath="notes/index.md"
+          initialLinkLabel="カスタム表示名"
+          onOpenedFile={vi.fn()}
+          onSaveToPath={vi.fn().mockResolvedValue({ ok: true })}
+          onInsertLink={onInsertLink}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    );
+
+    rerender(
+      <I18nProvider>
+        <CloudBrowserModal
+          isOpen
+          mode="insert-link"
+          remoteSettings={{
+            ...createDefaultRemoteSettings(),
+            enabled: true,
+            endpointUrl: 'https://cloud.example.com/dav/',
+            authType: 'none',
+          }}
+          remoteCredentials={{ username: '', password: '', bearerToken: '' }}
+          initialSubPath="notes"
+          initialFileName="index.md"
+          currentRemotePath="notes/index.md"
+          initialLinkLabel="カスタム表示名"
+          onOpenedFile={vi.fn()}
+          onSaveToPath={vi.fn().mockResolvedValue({ ok: true })}
+          onInsertLink={onInsertLink}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    );
+
+    fireEvent.click(await screen.findByRole('option', { name: /plan\.md/ }));
+    expect(screen.getByLabelText('リンク表示名')).toHaveValue('カスタム表示名');
+    fireEvent.click(screen.getByRole('button', { name: 'リンクを挿入' }));
+    expect(onInsertLink).toHaveBeenLastCalledWith('カスタム表示名', './plan.md');
+  });
 });

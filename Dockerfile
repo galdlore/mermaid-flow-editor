@@ -18,6 +18,10 @@ RUN npx tsc --noEmit && npx vite build
 FROM nginx:1.27-alpine
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/25-embed-headers.sh /tmp/25-embed-headers.sh
+RUN tr -d '\r' < /tmp/25-embed-headers.sh > /docker-entrypoint.d/25-embed-headers.sh \
+    && rm -f /tmp/25-embed-headers.sh \
+    && chmod +x /docker-entrypoint.d/25-embed-headers.sh
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80

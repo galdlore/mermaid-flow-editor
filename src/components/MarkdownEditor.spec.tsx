@@ -14,7 +14,15 @@ vi.mock('../utils/mermaidRender', () => ({
   renderMermaidSvg: vi.fn().mockResolvedValue({ svg: '<svg></svg>', error: null }),
 }));
 
-function ControlledSplitEditor({ initialValue }: { initialValue: string }) {
+function ControlledSplitEditor({
+  initialValue,
+  onOpenMarkdownLink,
+  isDocumentLink,
+}: {
+  initialValue: string;
+  onOpenMarkdownLink?: (href: string) => void;
+  isDocumentLink?: (href: string) => boolean;
+}) {
   const [value, setValue] = useState(initialValue);
   return (
     <I18nProvider>
@@ -22,6 +30,8 @@ function ControlledSplitEditor({ initialValue }: { initialValue: string }) {
         value={value}
         onChange={setValue}
         onEditMermaid={vi.fn()}
+        onOpenMarkdownLink={onOpenMarkdownLink}
+        isDocumentLink={isDocumentLink}
         editorMode="split"
         onChangeEditorMode={vi.fn()}
         tabSize={2}
@@ -49,5 +59,28 @@ describe('MarkdownEditor split mode keyboard editing', () => {
     fireEvent.keyDown(textarea, { key: 'Tab' });
 
     expect(textarea.value).toBe('1. first\n  2. \n3. third');
+  });
+
+  it('intercepts in-app markdown document links in preview and marks external links safely', () => {
+    const onOpenMarkdownLink = vi.fn();
+    render(
+      <ControlledSplitEditor
+        initialValue={'[仕様書](./spec.md) と [外部](https://example.com)'}
+        onOpenMarkdownLink={onOpenMarkdownLink}
+        isDocumentLink={(href) => href.endsWith('.md')}
+      />
+    );
+
+    const specLink = screen.getByRole('link', { name: '仕様書' });
+    expect(specLink).toHaveClass('markdown-doc-link');
+    expect(specLink).not.toHaveAttribute('target', '_blank');
+
+    const clickResult = fireEvent.click(specLink);
+    expect(clickResult).toBe(false);
+    expect(onOpenMarkdownLink).toHaveBeenCalledWith('./spec.md');
+
+    const externalLink = screen.getByRole('link', { name: '外部' });
+    expect(externalLink).toHaveAttribute('target', '_blank');
+    expect(externalLink).toHaveAttribute('rel', 'noopener noreferrer');
   });
 });

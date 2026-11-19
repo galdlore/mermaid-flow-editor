@@ -6,4 +6,7 @@ services:
     container_name: mermaid-flow-editor
     ports:
       - "${APP_PORT:-18420}:80"
+    environment:
+      # OpenCloud等のiframe埋め込みを許可する場合はオリジンを指定 (例: "'self' https://nextcloud-pi.tailfb0b8.ts.net:9443")
+      EMBED_FRAME_ANCESTORS: ${EMBED_FRAME_ANCESTORS:-'none'}
     restart: unless-stopped

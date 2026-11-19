@@ -30,6 +30,21 @@ export const jaCatalog: TranslationCatalog = {
     statusRemoteLocked: '保存済みの認証情報が暗号化ロックされています。設定画面でパスフレーズを入力して解除してください。',
     statusRemoteCorsHint: '通信に失敗しました。サーバ側のCORS許可設定または同一オリジンプロキシ(/dav/...)を確認してください。',
     statusRemotePermissionDenied: '保存先ホストへのアクセス権限が許可されませんでした。',
+    statusSwitchedExistingTab: (fileName) => `すでに開いているタブへ切り替えました: ${fileName}`,
+    statusCloudLinkInserted: (label) => `クラウドファイルへのリンクを挿入しました: ${label}`,
+    statusLinkedFileNotFound: (fileName) => `リンク先のファイルが見つかりませんでした: ${fileName}`,
+    statusLinkedFileOpenError: (detail) => `リンク先のファイルを開けませんでした: ${detail}`,
+    statusLinkedLocalRequiresOpen:
+      'ローカルの相対リンクを開くには、「ファイル」→「開く」から開いたファイル上でクリックしてください。',
+    statusLinkedLocalRequiresSave:
+      '相対リンクを開くには、先にこのファイルを保存するか、設定画面でOpenCloud連携を有効にしてください。',
+    statusLinkedLocalBrowserUnsupported:
+      'ブラウザ版ではセキュリティ制約により別のローカルファイルを直接開けません。OpenCloud連携またはデスクトップ版をご利用ください。',
+    statusEmbedOriginMissing:
+      '埋め込みモードの接続先オリジンを確認できません。URLに ?embed=1&origin=... を指定して開いてください。',
+    statusEmbedReadOnly: 'このファイルは読み取り専用のため保存できません。',
+    statusEmbedSaveError: (detail) => `ホスト側への保存に失敗しました: ${detail}`,
+    statusEmbedTimeout: 'ホスト側からの応答がタイムアウトしました。',
     statusDroppedOpened: (count, firstFileName) =>
       count <= 1
         ? `ドロップされたファイルを開きました: ${firstFileName}`
@@ -88,6 +103,7 @@ export const jaCatalog: TranslationCatalog = {
     strikePlaceholder: '打ち消しテキスト',
     linkTitle: 'リンク挿入',
     linkPlaceholder: 'リンク名',
+    cloudLinkTitle: 'クラウドファイルへのリンクを挿入',
     bulletListTitle: '箇条書きリスト',
     orderedListTitle: '番号付きリスト',
     taskListTitle: 'タスクリスト',
@@ -131,6 +147,8 @@ export const jaCatalog: TranslationCatalog = {
     tableDeleteCol: '- 列を削除',
     tabSizeLabel: 'Tabインデント',
     tabSpacesOption: (count) => `${count}スペース`,
+    openLinkedDocTitle: 'クリックでアプリ内の別タブで開く',
+    wysiwygLinkHint: 'Ctrl+クリックでリンクを開く',
   },
   modal: {
     ariaLabel: 'Mermaid GUIエディタ',
@@ -1375,6 +1393,7 @@ export const jaCatalog: TranslationCatalog = {
   cloudBrowser: {
     openTitle: 'クラウドから開く',
     saveAsTitle: 'クラウドに別名保存',
+    insertLinkTitle: 'クラウドファイルへのリンクを挿入',
     closeAria: 'クラウドブラウザを閉じる',
     rootLabel: 'ルート',
     upFolderBtn: '上のフォルダへ',
@@ -1394,12 +1413,19 @@ export const jaCatalog: TranslationCatalog = {
       '一覧を取得できない場合でも、下の入力欄へファイル名や相対パス（例: notes/memo.md）を直接指定して開く・保存できます。',
     fileNameField: 'ファイル名または相対パス',
     fileNamePlaceholder: '例: memo.md または notes/memo.md',
+    linkLabelField: 'リンク表示名',
+    linkLabelPlaceholder: '省略時はファイル名',
+    linkFormatField: 'リンク形式',
+    linkFormatRelative: '相対パス（推奨）',
+    linkFormatWebdavUrl: 'WebDAVフルURL',
+    linkPreviewLabel: '挿入プレビュー',
     targetPathPreviewLabel: '対象パス',
     fileNameRequired: 'ファイル名または相対パスを入力してください。',
     openBtn: '開く',
     openingBtn: '読み込み中...',
     saveBtn: 'ここへ保存',
     savingBtn: '保存中...',
+    insertLinkBtn: 'リンクを挿入',
     cancelBtn: 'キャンセル',
   },
 };

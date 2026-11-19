@@ -758,6 +758,13 @@ body,
   flex-wrap: wrap;
 }
 
+.wysiwyg-link-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .editor-pane-wysiwyg .pane-header {
   min-height: 40px;
 }
@@ -1009,6 +1016,16 @@ body,
 
 .markdown-preview-body a:hover {
   text-decoration: underline;
+}
+
+.markdown-preview-body a.markdown-doc-link {
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+}
+
+.markdown-preview-body a.markdown-doc-link:hover {
+  text-decoration-style: solid;
 }
 
 .markdown-preview-body :not(pre)>code {

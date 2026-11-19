@@ -479,6 +479,12 @@
   border-top: 1px solid var(--border-color);
 }
 
+.cloud-link-options-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .cloud-footer-bottom {
   display: flex;
   align-items: center;
@@ -495,6 +501,10 @@
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+}
+
+.cloud-path-preview.is-markdown-snippet {
+  font-family: "Consolas", "Cascadia Mono", monospace;
 }
 
 .cloud-footer-buttons {

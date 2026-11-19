@@ -29,6 +29,7 @@ function renderToolbar(overrides: Partial<React.ComponentProps<typeof Toolbar>> 
     onItalic: vi.fn(),
     onStrike: vi.fn(),
     onLink: vi.fn(),
+    onInsertCloudLink: vi.fn(),
     onBulletList: vi.fn(),
     onOrderedList: vi.fn(),
     onTaskList: vi.fn(),
@@ -85,5 +86,23 @@ describe('Toolbar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '使い方ガイドを新しいタブで開く' }));
     expect(props.onOpenHelp).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'クラウドファイルへのリンクを挿入' }));
+    expect(props.onInsertCloudLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides standalone cloud menu actions and cloud link button in embed mode while keeping Save and Export', () => {
+    renderToolbar({ isEmbedMode: true });
+
+    expect(
+      screen.queryByRole('button', { name: 'クラウドファイルへのリンクを挿入' })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'ファイル' }));
+    expect(screen.getByRole('menuitem', { name: /^保存/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'HTML出力' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'クラウドから開く' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'クラウドに保存' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'クラウドに別名保存' })).not.toBeInTheDocument();
   });
 });

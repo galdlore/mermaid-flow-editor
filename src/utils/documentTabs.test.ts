@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   computeTabDisplayTitles,
   formatDuplicateFileName,
+  getRemoteUrlBaseName,
   getTabBaseFileName,
   isSupportedDroppedFileName,
   loadPersistedTabsState,
@@ -121,6 +122,31 @@ test('persistTabsState and loadPersistedTabsState round-trip tabs and migrate le
         '使い方ガイド.md'
       ),
       { 'tab-r': 'design.md' }
+    );
+
+    assert.equal(
+      getRemoteUrlBaseName(
+        'https://cloud.example.com/dav/spaces/other/%E8%A8%AD%E8%A8%88%20%E6%9B%B8.md#sec',
+        '無題.md'
+      ),
+      '設計 書.md'
+    );
+
+    const urlTabs = [
+      {
+        id: 'tab-u',
+        filePath: null,
+        content: '# Remote URL',
+        isDirty: false,
+        remoteUrl: 'https://cloud.example.com/dav/spaces/other/%E4%BB%95%E6%A7%98%E6%9B%B8.md',
+      },
+    ];
+    persistTabsState('tabs-key', urlTabs, 'tab-u');
+    const restoredUrl = loadPersistedTabsState('tabs-key', 'legacy-key', '# Default');
+    assert.deepEqual(restoredUrl.tabs, urlTabs);
+    assert.deepEqual(
+      computeTabDisplayTitles(restoredUrl.tabs, '無題.md', '使い方ガイド.md'),
+      { 'tab-u': '仕様書.md' }
     );
   } finally {
     restore();

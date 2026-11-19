@@ -11,6 +11,7 @@ import {
   FileDown,
   FileOutput,
   FilePlus,
+  FileSymlink,
   FileText,
   FolderOpen,
   FolderUp,
@@ -40,6 +41,7 @@ export interface ToolbarProps {
   isDirty: boolean;
   switcherOpen: boolean;
   editorMode: 'wysiwyg' | 'split';
+  isEmbedMode?: boolean;
   onToggleEditorMode: () => void;
   onOpenTabSwitcher: () => void;
   onNewFile: () => void;
@@ -59,6 +61,7 @@ export interface ToolbarProps {
   onItalic: () => void;
   onStrike: () => void;
   onLink: () => void;
+  onInsertCloudLink?: () => void;
   onBulletList: () => void;
   onOrderedList: () => void;
   onTaskList: () => void;
@@ -74,6 +77,7 @@ export default function Toolbar({
   isDirty,
   switcherOpen,
   editorMode,
+  isEmbedMode = false,
   onToggleEditorMode,
   onOpenTabSwitcher,
   onNewFile,
@@ -93,6 +97,7 @@ export default function Toolbar({
   onItalic,
   onStrike,
   onLink,
+  onInsertCloudLink,
   onBulletList,
   onOrderedList,
   onTaskList,
@@ -230,38 +235,42 @@ export default function Toolbar({
               <span className="file-menu-shortcut">Ctrl+Shift+S</span>
             </button>
 
-            <div className="file-menu-divider" />
-            <div className="file-menu-section-label">{t.toolbar.fileSectionCloud}</div>
-            <button
-              type="button"
-              role="menuitem"
-              className="file-menu-item"
-              onClick={() => runFileAction(onOpenFromCloud)}
-              title={t.toolbar.openCloudTitle}
-            >
-              <CloudDownload size={15} />
-              <span className="file-menu-item-label">{t.toolbar.openCloudLabel}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="file-menu-item"
-              onClick={() => runFileAction(onSaveToCloud)}
-              title={t.toolbar.saveCloudTitle}
-            >
-              <CloudUpload size={15} />
-              <span className="file-menu-item-label">{t.toolbar.saveCloudLabel}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="file-menu-item"
-              onClick={() => runFileAction(onSaveToCloudAs)}
-              title={t.toolbar.saveCloudAsTitle}
-            >
-              <FolderUp size={15} />
-              <span className="file-menu-item-label">{t.toolbar.saveCloudAsLabel}</span>
-            </button>
+            {!isEmbedMode && (
+              <>
+                <div className="file-menu-divider" />
+                <div className="file-menu-section-label">{t.toolbar.fileSectionCloud}</div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="file-menu-item"
+                  onClick={() => runFileAction(onOpenFromCloud)}
+                  title={t.toolbar.openCloudTitle}
+                >
+                  <CloudDownload size={15} />
+                  <span className="file-menu-item-label">{t.toolbar.openCloudLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="file-menu-item"
+                  onClick={() => runFileAction(onSaveToCloud)}
+                  title={t.toolbar.saveCloudTitle}
+                >
+                  <CloudUpload size={15} />
+                  <span className="file-menu-item-label">{t.toolbar.saveCloudLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="file-menu-item"
+                  onClick={() => runFileAction(onSaveToCloudAs)}
+                  title={t.toolbar.saveCloudAsTitle}
+                >
+                  <FolderUp size={15} />
+                  <span className="file-menu-item-label">{t.toolbar.saveCloudAsLabel}</span>
+                </button>
+              </>
+            )}
 
             <div className="file-menu-divider" />
             <div className="file-menu-section-label">{t.toolbar.fileSectionExport}</div>
@@ -371,6 +380,18 @@ export default function Toolbar({
         >
           <Link size={16} />
         </button>
+        {!isEmbedMode && onInsertCloudLink && (
+          <button
+            type="button"
+            className="toolbar-btn toolbar-btn-icon"
+            onMouseDown={keepEditorFocus}
+            onClick={onInsertCloudLink}
+            title={t.toolbar.cloudLinkTitle}
+            aria-label={t.toolbar.cloudLinkTitle}
+          >
+            <FileSymlink size={16} />
+          </button>
+        )}
       </div>
 
       <div className="toolbar-divider" />

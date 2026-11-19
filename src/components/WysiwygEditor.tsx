@@ -57,6 +57,8 @@ export interface WysiwygEditorHandle {
   applyItalic: () => void;
   applyStrike: () => void;
   applyLink: (placeholder: string) => void;
+  getSelectedText: () => string;
+  insertLink: (label: string, href: string) => void;
   applyBulletList: () => void;
   applyOrderedList: () => void;
   applyTaskList: () => void;
@@ -71,6 +73,7 @@ export interface WysiwygEditorProps {
   value: string;
   onChange: (nextMarkdown: string) => void;
   onEditMermaid: (blockIndex: number, code: string) => void;
+  onOpenMarkdownLink?: (href: string) => void;
 }
 
 const PENCIL_SVG =
@@ -106,7 +109,7 @@ function createErrorElement(title: string, message: string): HTMLElement {
 }
 
 const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
-  function WysiwygEditor({ value, onChange, onEditMermaid }, ref) {
+  function WysiwygEditor({ value, onChange, onEditMermaid, onOpenMarkdownLink }, ref) {
     const { t } = useI18n();
     const mountRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<Editor | null>(null);
@@ -120,6 +123,8 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
     onChangeRef.current = onChange;
     const onEditMermaidRef = useRef(onEditMermaid);
     onEditMermaidRef.current = onEditMermaid;
+    const onOpenMarkdownLinkRef = useRef(onOpenMarkdownLink);
+    onOpenMarkdownLinkRef.current = onOpenMarkdownLink;
     const stringsRef = useRef({
       editLabel: t.editor.editDiagramLabel,
       editTitle: t.editor.editDiagramTitle,
@@ -457,6 +462,38 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
           });
         },
 
+        getSelectedText() {
+          const editor = editorRef.current;
+          if (!editor || !readyRef.current) {
+            return '';
+          }
+          let selected = '';
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx);
+            const { from, to } = view.state.selection;
+            if (from !== to) {
+              selected = view.state.doc.textBetween(from, to, ' ').trim();
+            }
+          });
+          return selected;
+        },
+
+        insertLink(label: string, href: string) {
+          const cleanHref = href.trim();
+          if (!cleanHref) {
+            return;
+          }
+          const textLabel = label.trim() || cleanHref;
+          runWithFocus((editor) => {
+            editor.action((ctx) => {
+              const view = ctx.get(editorViewCtx);
+              const mark = linkSchema.type(ctx).create({ href: cleanHref });
+              const textNode = view.state.schema.text(textLabel, [mark]);
+              view.dispatch(view.state.tr.replaceSelectionWith(textNode, false).scrollIntoView());
+            });
+          });
+        },
+
         applyBulletList() {
           runWithFocus((editor) => {
             editor.action(callCommand(wrapInBulletListCommand.key));
@@ -550,6 +587,21 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
 
     const handleContainerClick = (event: React.MouseEvent<HTMLDivElement>): void => {
       const target = event.target as HTMLElement | null;
+      const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+      if (anchor && (event.ctrlKey || event.metaKey)) {
+        const rawHref = anchor.getAttribute('href') ?? '';
+        if (rawHref.trim()) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (onOpenMarkdownLinkRef.current) {
+            onOpenMarkdownLinkRef.current(rawHref);
+          } else if (/^https?:\/\//i.test(rawHref.trim())) {
+            window.open(rawHref.trim(), '_blank', 'noopener,noreferrer');
+          }
+        }
+        return;
+      }
+
       const taskLi = target?.closest('li[data-item-type="task"]') as HTMLElement | null;
       if (!taskLi || !editorRef.current || !readyRef.current) {
         return;
@@ -601,7 +653,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       <section className="editor-pane-wysiwyg">
         <div className="pane-header">
           <span>{t.editor.wysiwygPaneHeader}</span>
-          {isCursorInTable && (
+          {isCursorInTable ? (
             <div className="wysiwyg-table-actions">
               <button
                 type="button"
@@ -636,6 +688,8 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
                 {t.editor.tableDeleteCol}
               </button>
             </div>
+          ) : (
+            <span className="wysiwyg-link-hint">{t.editor.wysiwygLinkHint}</span>
           )}
         </div>
         <div className="wysiwyg-editor-scroll" onClick={handleContainerClick}>

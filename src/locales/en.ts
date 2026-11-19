@@ -30,6 +30,21 @@ export const enCatalog: TranslationCatalog = {
     statusRemoteLocked: 'Stored cloud credentials are encrypted and locked. Unlock them in Settings.',
     statusRemoteCorsHint: 'Network error. Check server CORS headers or use a same-origin proxy path like /dav/...',
     statusRemotePermissionDenied: 'Permission to access the target host was denied.',
+    statusSwitchedExistingTab: (fileName) => `Switched to already open tab: ${fileName}`,
+    statusCloudLinkInserted: (label) => `Inserted link to cloud file: ${label}`,
+    statusLinkedFileNotFound: (fileName) => `Linked file not found: ${fileName}`,
+    statusLinkedFileOpenError: (detail) => `Failed to open linked file: ${detail}`,
+    statusLinkedLocalRequiresOpen:
+      'To open local relative links, click from a file opened via File > Open.',
+    statusLinkedLocalRequiresSave:
+      'Save this file first or configure OpenCloud in Settings to open relative links.',
+    statusLinkedLocalBrowserUnsupported:
+      'Browsers cannot read sibling local files directly for security reasons. Use OpenCloud integration or the desktop app.',
+    statusEmbedOriginMissing:
+      'Embed parent origin could not be verified. Open with ?embed=1&origin=<parent-origin>.',
+    statusEmbedReadOnly: 'This file is read-only and cannot be saved.',
+    statusEmbedSaveError: (detail) => `Failed to save via host application: ${detail}`,
+    statusEmbedTimeout: 'Timed out waiting for a response from the host application.',
     statusDroppedOpened: (count, firstFileName) =>
       count <= 1
         ? `Opened dropped file in a new tab: ${firstFileName}`
@@ -88,6 +103,7 @@ export const enCatalog: TranslationCatalog = {
     strikePlaceholder: 'strikethrough text',
     linkTitle: 'Insert Link',
     linkPlaceholder: 'link text',
+    cloudLinkTitle: 'Insert Link to Cloud File',
     bulletListTitle: 'Bulleted List',
     orderedListTitle: 'Numbered List',
     taskListTitle: 'Task List',
@@ -131,6 +147,8 @@ export const enCatalog: TranslationCatalog = {
     tableDeleteCol: '- Delete Col',
     tabSizeLabel: 'Tab Indent',
     tabSpacesOption: (count) => `${count} spaces`,
+    openLinkedDocTitle: 'Click to open in a new tab',
+    wysiwygLinkHint: 'Ctrl+Click to open links',
   },
   modal: {
     ariaLabel: 'Mermaid GUI Editor',
@@ -1376,6 +1394,7 @@ export const enCatalog: TranslationCatalog = {
   cloudBrowser: {
     openTitle: 'Open from Cloud',
     saveAsTitle: 'Save to Cloud As',
+    insertLinkTitle: 'Insert Link to Cloud File',
     closeAria: 'Close cloud browser',
     rootLabel: 'Root',
     upFolderBtn: 'Up',
@@ -1395,12 +1414,19 @@ export const enCatalog: TranslationCatalog = {
       'Even if directory listing fails, you can still enter a filename or relative path (e.g., notes/memo.md) below.',
     fileNameField: 'Filename or relative path',
     fileNamePlaceholder: 'e.g., memo.md or notes/memo.md',
+    linkLabelField: 'Link Text',
+    linkLabelPlaceholder: 'Defaults to filename',
+    linkFormatField: 'Link Format',
+    linkFormatRelative: 'Relative path (Recommended)',
+    linkFormatWebdavUrl: 'Full WebDAV URL',
+    linkPreviewLabel: 'Markdown Preview',
     targetPathPreviewLabel: 'Target path',
     fileNameRequired: 'Please enter a filename or relative path.',
     openBtn: 'Open',
     openingBtn: 'Opening...',
     saveBtn: 'Save Here',
     savingBtn: 'Saving...',
+    insertLinkBtn: 'Insert Link',
     cancelBtn: 'Cancel',
   },
 };
