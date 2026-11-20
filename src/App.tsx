@@ -1645,6 +1645,7 @@ export default function App() {
           value={activeTab.content}
           onChange={handleChangeText}
           onEditMermaid={handleEditMermaid}
+          onOpenNewMermaid={handleOpenNewMermaid}
           onOpenMarkdownLink={(href) => void handleOpenMarkdownLink(href)}
           isDocumentLink={isDocumentLink}
           editorMode={editorMode}

@@ -73,6 +73,7 @@ export interface MarkdownEditorProps {
   value: string;
   onChange: (nextValue: string) => void;
   onEditMermaid: (blockIndex: number, code: string) => void;
+  onOpenNewMermaid?: () => void;
   onOpenMarkdownLink?: (href: string) => void;
   isDocumentLink?: (href: string) => boolean;
   editorMode: 'wysiwyg' | 'split';
@@ -153,6 +154,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       value,
       onChange,
       onEditMermaid,
+      onOpenNewMermaid,
       onOpenMarkdownLink,
       isDocumentLink,
       editorMode,
@@ -532,6 +534,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             value={value}
             onChange={onChange}
             onEditMermaid={onEditMermaid}
+            onOpenNewMermaid={onOpenNewMermaid}
             onOpenMarkdownLink={onOpenMarkdownLink}
           />
         )}

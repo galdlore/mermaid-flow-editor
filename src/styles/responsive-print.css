@@ -320,6 +320,14 @@
     padding: 12px 14px;
   }
 
+  .wysiwyg-prosemirror-root .ProseMirror {
+    padding-left: 0;
+  }
+
+  .wysiwyg-block-handle {
+    display: none;
+  }
+
   .markdown-textarea {
     padding: 12px;
     font-size: 14px;
@@ -397,6 +405,9 @@
   .modal-backdrop,
   .editor-pane-right .pane-header,
   .mermaid-edit-float-btn,
+  .wysiwyg-block-handle,
+  .wysiwyg-block-menu,
+  .milkdown-drop-indicator,
   .editor-split-pane .editor-pane-left,
   .editor-split-pane .editor-pane-wysiwyg,
   .editor-split-pane[data-editor-mode] .editor-pane-left,

@@ -182,6 +182,26 @@ export interface TranslationCatalog {
     tabSpacesOption: (count: number) => string;
     openLinkedDocTitle: string;
     wysiwygLinkHint: string;
+    blockAddTitle: string;
+    blockDragTitle: string;
+    blockMenuSearchPlaceholder: string;
+    blockMenuNoMatch: string;
+    blockMenuSlashHint: string;
+    blockItemHeading1: string;
+    blockItemHeading2: string;
+    blockItemHeading3: string;
+    blockItemBulletList: string;
+    blockItemOrderedList: string;
+    blockItemTaskList: string;
+    blockItemTable: string;
+    blockItemMermaid: string;
+    blockItemCodeBlock: string;
+    blockItemQuote: string;
+    blockItemDivider: string;
+    blockActionMoveUp: string;
+    blockActionMoveDown: string;
+    blockActionDuplicate: string;
+    blockActionDelete: string;
   };
   modal: {
     ariaLabel: string;
