@@ -1,6 +1,11 @@
 import type { Language } from './types';
 
-export const INITIAL_MARKDOWN_JA = `# Mermaid Flow Editor 使い方ガイド
+export const APP_VERSION =
+  typeof __APP_VERSION__ === 'string' && __APP_VERSION__.trim().length > 0
+    ? __APP_VERSION__.trim()
+    : 'dev';
+
+export const INITIAL_MARKDOWN_JA = `# Mermaid Flow Editor 使い方ガイド (v${APP_VERSION})
 
 Mermaid Flow Editorは、Markdown文書と15種類のMermaid図をGUI操作だけで作成・編集できる複数タブ対応エディタです。ツールバー右上の「？」ボタンからいつでもこのガイドを開き直せます。
 
@@ -67,7 +72,7 @@ flowchart TD
 ツールバーのリンク挿入ボタンの右にある「クラウドファイルへのリンクを挿入」アイコンを押すと、OpenCloud上のファイル一覧から選ぶだけで相対パスやWebDAVフルURLのリンク記法を自動挿入できます。
 `;
 
-export const INITIAL_MARKDOWN_EN = `# Mermaid Flow Editor Usage Guide
+export const INITIAL_MARKDOWN_EN = `# Mermaid Flow Editor Usage Guide (v${APP_VERSION})
 
 Mermaid Flow Editor is a multi-tab editor for creating Markdown documents and 15 types of Mermaid diagrams visually. Click the "?" help button in the top-right toolbar anytime to reopen this guide.
 

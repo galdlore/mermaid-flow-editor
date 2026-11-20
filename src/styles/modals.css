@@ -14,6 +14,7 @@
 .settings-modal {
   width: min(620px, 94vw);
   max-height: 88vh;
+  max-height: 88dvh;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -21,6 +22,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.settings-modal .modal-header,
+.cloud-browser-modal .modal-header {
+  flex-shrink: 0;
 }
 
 .settings-close-icon-btn {
@@ -45,11 +51,12 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .settings-modal-body {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 16px 20px;
@@ -59,6 +66,7 @@
 }
 
 .settings-modal-footer {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -269,6 +277,7 @@
 .cloud-browser-modal {
   width: min(680px, 94vw);
   max-height: 88vh;
+  max-height: 88dvh;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -279,7 +288,7 @@
 }
 
 .cloud-browser-body {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   padding: 14px 18px;
   display: flex;
@@ -471,6 +480,7 @@
 }
 
 .cloud-footer-form {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -522,5 +532,35 @@
 .cloud-footer-buttons .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* モーダル読み込みエラー時のフォールバック表示 */
+.modal-error-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-error-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.modal-error-detail {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  color: var(--danger-color);
+  font-family: "Consolas", "Cascadia Mono", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
 }
 

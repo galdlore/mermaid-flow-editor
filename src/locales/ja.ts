@@ -52,6 +52,11 @@ export const jaCatalog: TranslationCatalog = {
     statusDroppedUnsupported:
       '対応していないファイル形式です。.md / .markdown / .txt ファイルをドロップしてください。',
     statusDropError: 'ドロップされたファイルの読み込みに失敗しました。',
+    modalErrorTitle: '画面を表示できませんでした',
+    modalErrorDescription:
+      'アプリの更新直後に古い画面が残っている場合、ページを再読み込みすると解消します。',
+    modalErrorReloadBtn: 'ページを再読み込み',
+    modalErrorCloseBtn: '閉じる',
     closeBanner: '閉じる',
   },
   tabs: {

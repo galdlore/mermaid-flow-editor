@@ -86,6 +86,10 @@ export interface TranslationCatalog {
     statusDroppedOpened: (count: number, firstFileName: string) => string;
     statusDroppedUnsupported: string;
     statusDropError: string;
+    modalErrorTitle: string;
+    modalErrorDescription: string;
+    modalErrorReloadBtn: string;
+    modalErrorCloseBtn: string;
     closeBanner: string;
   };
   tabs: {

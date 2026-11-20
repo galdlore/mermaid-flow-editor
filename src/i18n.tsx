@@ -15,6 +15,7 @@ import { readLocalStorage, writeLocalStorage } from './utils/storage';
 
 export type { Language, TranslationCatalog } from './locales/types';
 export {
+  APP_VERSION,
   INITIAL_MARKDOWN_JA,
   INITIAL_MARKDOWN_EN,
   getInitialMarkdownByLang,

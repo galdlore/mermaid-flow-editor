@@ -53,10 +53,11 @@ import {
   splitRemoteRelativePath,
 } from './utils/remoteStorage';
 import { isElectronEnv, readLocalStorage, writeLocalStorage } from './utils/storage';
+import CloudBrowserModal from './components/CloudBrowserModal';
+import ModalErrorBoundary from './components/ModalErrorBoundary';
+import SettingsModal from './components/SettingsModal';
 
 const MermaidModal = lazy(() => import('./components/MermaidModal'));
-const SettingsModal = lazy(() => import('./components/SettingsModal'));
-const CloudBrowserModal = lazy(() => import('./components/CloudBrowserModal'));
 
 const LEGACY_DRAFT_STORAGE_KEY = 'mermaid-flow-editor:draft';
 const EDITOR_MODE_STORAGE_KEY = 'mermaid-flow-editor:editor-mode';
@@ -127,6 +128,9 @@ function createInitialTabsState(lang: Language, isEmbedMode: boolean): Persisted
 function isUntouchedInitialTab(tab: DocumentTab): boolean {
   if (tab.isDirty || tab.filePath !== null) {
     return false;
+  }
+  if (tab.isGuide && !tab.remoteFileName && !tab.remoteUrl && !tab.embedFileId) {
+    return true;
   }
   return (
     tab.content.trim().length === 0 ||
@@ -342,10 +346,17 @@ export default function App() {
     setTabsState((prev) => {
       let changed = false;
       const nextTabs = prev.tabs.map((tab) => {
+        const isCleanGuideTab =
+          Boolean(tab.isGuide) &&
+          !tab.remoteFileName &&
+          !tab.remoteUrl &&
+          !tab.embedFileId;
         if (
           !tab.isDirty &&
           tab.filePath === null &&
-          (tab.content === INITIAL_MARKDOWN_JA || tab.content === INITIAL_MARKDOWN_EN) &&
+          (isCleanGuideTab ||
+            tab.content === INITIAL_MARKDOWN_JA ||
+            tab.content === INITIAL_MARKDOWN_EN) &&
           tab.content !== targetSample
         ) {
           changed = true;
@@ -1668,15 +1679,29 @@ export default function App() {
         </div>
       )}
 
-      <Suspense fallback={null}>
-        {mermaidModalOpen && (
-          <MermaidModal
-            isOpen={mermaidModalOpen}
-            initialCode={editingInitialCode}
-            onApply={handleApplyMermaid}
-            onClose={() => setMermaidModalOpen(false)}
-          />
-        )}
+      <ModalErrorBoundary
+        title={t.app.modalErrorTitle}
+        description={t.app.modalErrorDescription}
+        reloadLabel={t.app.modalErrorReloadBtn}
+        closeLabel={t.app.modalErrorCloseBtn}
+        resetKey={`${mermaidModalOpen ? 1 : 0}-${settingsModalOpen ? 1 : 0}-${cloudBrowserMode ?? 'none'}`}
+        onClose={() => {
+          setMermaidModalOpen(false);
+          setSettingsModalOpen(false);
+          setCloudBrowserMode(null);
+          setPendingLinkLabel('');
+        }}
+      >
+        <Suspense fallback={null}>
+          {mermaidModalOpen && (
+            <MermaidModal
+              isOpen={mermaidModalOpen}
+              initialCode={editingInitialCode}
+              onApply={handleApplyMermaid}
+              onClose={() => setMermaidModalOpen(false)}
+            />
+          )}
+        </Suspense>
 
         {settingsModalOpen && (
           <SettingsModal
@@ -1713,7 +1738,7 @@ export default function App() {
             }}
           />
         )}
-      </Suspense>
+      </ModalErrorBoundary>
     </div>
   );
 }

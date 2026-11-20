@@ -12,10 +12,14 @@ const SALT_BYTES = 16;
 const IV_BYTES = 12;
 
 function getSubtleCrypto(): SubtleCrypto | null {
-  if (typeof globalThis.crypto === 'undefined' || typeof globalThis.crypto.subtle === 'undefined') {
+  try {
+    if (typeof globalThis.crypto === 'undefined' || typeof globalThis.crypto.subtle === 'undefined') {
+      return null;
+    }
+    return globalThis.crypto.subtle;
+  } catch {
     return null;
   }
-  return globalThis.crypto.subtle;
 }
 
 /** Web Crypto API (crypto.subtle) が利用可能かを判定する */

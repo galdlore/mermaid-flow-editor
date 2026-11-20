@@ -52,6 +52,11 @@ export const enCatalog: TranslationCatalog = {
     statusDroppedUnsupported:
       'Unsupported file type. Please drop .md, .markdown, or .txt files.',
     statusDropError: 'Failed to read the dropped file.',
+    modalErrorTitle: 'Unable to display dialog',
+    modalErrorDescription:
+      'If the app was recently updated, reloading the page usually resolves this issue.',
+    modalErrorReloadBtn: 'Reload Page',
+    modalErrorCloseBtn: 'Close',
     closeBanner: 'Close',
   },
   tabs: {
