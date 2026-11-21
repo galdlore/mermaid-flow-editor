@@ -1,7 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import { FORBIDDEN_XYCHART_TEXT_CHARS_REGEX } from '../utils/inputSafeguard';
 import type {
   XYChartDiagramData,
@@ -19,49 +24,6 @@ export interface XYChartInspectorProps {
 }
 
 type XYChartSectionKey = 'series' | 'axes' | 'settings' | 'comments';
-
-interface XYChartAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}
-
-function XYChartAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  headerAction,
-  children,
-}: XYChartAccordionProps) {
-  return (
-    <section
-      className={`inspector-section inspector-accordion ${isOpen ? 'is-open' : 'is-collapsed'}`}
-    >
-      <div className="inspector-section-header inspector-accordion-header">
-        <button
-          type="button"
-          className="inspector-accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="inspector-accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="inspector-section-count">{countBadge}</span>
-          )}
-        </button>
-        {headerAction && (
-          <div className="inspector-accordion-actions">{headerAction}</div>
-        )}
-      </div>
-      {isOpen && <div className="inspector-accordion-body">{children}</div>}
-    </section>
-  );
-}
 
 function nextSeriesId(series: XYChartSeriesData[]): string {
   const used = new Set(series.map((s) => s.id));
@@ -160,26 +122,11 @@ export default function XYChartInspector({
 
   return (
     <aside className="mermaid-inspector">
-      <div className="inspector-accordion-toolbar">
-        <button
-          type="button"
-          className="inspector-accordion-bulk-btn"
-          onClick={() => setAllSections(true)}
-        >
-          {t.inspector.expandAllSections}
-        </button>
-        <button
-          type="button"
-          className="inspector-accordion-bulk-btn"
-          onClick={() => setAllSections(false)}
-        >
-          {t.inspector.collapseAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls mode="dual" onSetAll={setAllSections} />
 
-      <XYChartAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.xychart.seriesHeading}
-        countBadge={xychartData.series.length}
+        badgeText={xychartData.series.length}
         isOpen={openSections.series}
         onToggle={() => toggleSection('series')}
         headerAction={
@@ -288,9 +235,9 @@ export default function XYChartInspector({
         ) : (
           <p className="inspector-hint">{t.inspector.xychart.selectSeriesHint}</p>
         )}
-      </XYChartAccordion>
+      </InspectorCollapsibleSection>
 
-      <XYChartAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.xychart.axesHeading}
         isOpen={openSections.axes}
         onToggle={() => toggleSection('axes')}
@@ -488,9 +435,9 @@ export default function XYChartInspector({
             </div>
           )}
         </div>
-      </XYChartAccordion>
+      </InspectorCollapsibleSection>
 
-      <XYChartAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.xychart.settingsHeading}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
@@ -584,37 +531,22 @@ export default function XYChartInspector({
             </div>
           </div>
         </div>
-      </XYChartAccordion>
+      </InspectorCollapsibleSection>
 
-      <XYChartAccordion
+      <InspectorCommentsSection
         title={t.inspector.commentsHeading}
-        countBadge={xychartData.comments?.length ?? 0}
+        placeholder={t.inspector.commentsPlaceholder}
+        comments={xychartData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <div className="inspector-field">
-          <label htmlFor="xychart-comments-textarea">
-            {t.inspector.commentsField}
-          </label>
-          <textarea
-            id="xychart-comments-textarea"
-            className="inspector-textarea"
-            rows={4}
-            value={(xychartData.comments ?? []).join('\n')}
-            placeholder={t.inspector.commentsPlaceholder}
-            onChange={(event) => {
-              const nextComments = event.target.value
-                .split(/\r?\n/)
-                .map((line) => line.replace(/^\s*%%+\s?/, ''));
-              const hasContent = nextComments.some((l) => l.trim().length > 0);
-              onChange({
-                ...xychartData,
-                comments: hasContent ? nextComments : undefined,
-              });
-            }}
-          />
-        </div>
-      </XYChartAccordion>
+        rows={4}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...xychartData,
+            comments: nextComments,
+          })
+        }
+      />
     </aside>
   );
 }

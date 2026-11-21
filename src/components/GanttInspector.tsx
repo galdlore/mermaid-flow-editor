@@ -1,18 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { useState } from 'react';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_CLASS_NAME_CHARS_REGEX,
   FORBIDDEN_GANTT_LABEL_CHARS_REGEX,
-  FORBIDDEN_LABEL_CHARS_REGEX,
   FORBIDDEN_URL_CHARS_REGEX,
 } from '../utils/inputSafeguard';
 import type {
@@ -45,73 +42,26 @@ const WEEKDAY_OPTIONS: ReadonlyArray<GanttWeekday> = [
   'sunday',
 ];
 
-interface GanttAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}
-
-function GanttAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  headerAction,
-  children,
-}: GanttAccordionProps) {
-  return (
-    <section className={`inspector-section accordion-section ${isOpen ? 'is-open' : ''}`}>
-      <div className="accordion-header-row">
-        <button
-          type="button"
-          className="accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          <span className="accordion-chevron" aria-hidden="true">
-            {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          </span>
-          <span className="accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="accordion-badge">{countBadge}</span>
-          )}
-        </button>
-        {headerAction && <div className="accordion-extra-action">{headerAction}</div>}
-      </div>
-      {isOpen && <div className="accordion-body">{children}</div>}
-    </section>
-  );
-}
-
 export default function GanttInspector({
   ganttData,
   selectedTaskId,
   onChange,
   onSelectTask,
 }: GanttInspectorProps) {
-  const { lang, t } = useI18n();
+  const { t } = useI18n();
   const g = t.inspector.gantt;
   const tasks = ganttData.tasks;
   const sections = ganttData.sections;
   const selectedTask = tasks.find((item) => item.id === selectedTaskId) ?? null;
   const otherTasks = tasks.filter((item) => item.id !== selectedTask?.id);
   const isIsoDateFormat = ganttData.dateFormat.trim() === 'YYYY-MM-DD';
-  const comments = ganttData.comments ?? [];
 
-  const [commentInputs, setCommentInputs] = useState<string[]>(comments);
   const [openSections, setOpenSections] = useState<Record<GanttSectionKey, boolean>>({
     task: true,
     sections: true,
     settings: false,
     comments: false,
   });
-
-  useEffect(() => {
-    setCommentInputs(ganttData.comments ?? []);
-  }, [ganttData.comments]);
 
   const toggleSection = (key: GanttSectionKey): void => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -251,31 +201,14 @@ export default function GanttInspector({
     }
   };
 
-  const handleCommentsChange = (nextComments: string[]): void => {
-    setCommentInputs(nextComments);
-    const hasContent = nextComments.some((c) => c.trim() !== '');
-    onChange({
-      ...ganttData,
-      comments: hasContent ? nextComments : undefined,
-    });
-  };
-
   return (
     <div className="mermaid-inspector">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="btn-link-subtle"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded ? t.inspector.collapseAllSections : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       {/* 1. 選択中タスクの編集 */}
-      <GanttAccordion
+      <InspectorCollapsibleSection
         title={g.taskHeading}
-        countBadge={tasks.length}
+        badgeText={tasks.length}
         isOpen={openSections.task}
         onToggle={() => toggleSection('task')}
         headerAction={
@@ -601,12 +534,12 @@ export default function GanttInspector({
         ) : (
           <p className="hint-text">{g.selectTaskHint}</p>
         )}
-      </GanttAccordion>
+      </InspectorCollapsibleSection>
 
       {/* 2. セクション管理 */}
-      <GanttAccordion
+      <InspectorCollapsibleSection
         title={g.sectionsHeading}
-        countBadge={sections.length}
+        badgeText={sections.length}
         isOpen={openSections.sections}
         onToggle={() => toggleSection('sections')}
         headerAction={
@@ -687,10 +620,10 @@ export default function GanttInspector({
             ))}
           </div>
         )}
-      </GanttAccordion>
+      </InspectorCollapsibleSection>
 
       {/* 3. チャート全体・軸設定 */}
-      <GanttAccordion
+      <InspectorCollapsibleSection
         title={g.settingsHeading}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
@@ -888,65 +821,22 @@ export default function GanttInspector({
             <span>{g.compactModeField}</span>
           </label>
         </div>
-      </GanttAccordion>
+      </InspectorCollapsibleSection>
 
       {/* 4. コメント */}
-      <GanttAccordion
+      <InspectorCommentsSection
         title={t.inspector.commentsHeading}
-        countBadge={commentInputs.filter((c) => c.trim() !== '').length}
+        placeholder={t.inspector.commentsPlaceholder}
+        comments={ganttData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-        headerAction={
-          <button
-            type="button"
-            className="btn-secondary btn-xs"
-            onClick={() => {
-              if (!openSections.comments) {
-                setOpenSections((prev) => ({ ...prev, comments: true }));
-              }
-              handleCommentsChange([...commentInputs, '']);
-            }}
-          >
-            <Plus size={13} />
-            <span>{lang === 'ja' ? '追加' : 'Add'}</span>
-          </button>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...ganttData,
+            comments: nextComments,
+          })
         }
-      >
-        <div className="field-group">
-          <label>{t.inspector.commentsField}</label>
-          {commentInputs.length === 0 ? (
-            <p className="hint-text">{t.inspector.commentsPlaceholder}</p>
-          ) : (
-            <div className="edge-list">
-              {commentInputs.map((commentText, idx) => (
-                <div key={idx} className="comment-row-item">
-                  <GuardedInput
-                    value={commentText}
-                    forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
-                    formatError={t.inspector.safeguard.syntaxErrorChars}
-                    placeholder={t.inspector.commentsPlaceholder}
-                    onChangeValue={(nextVal) =>
-                      handleCommentsChange(
-                        commentInputs.map((c, i) => (i === idx ? nextVal : c))
-                      )
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn-icon-danger"
-                    title={lang === 'ja' ? 'コメントを削除' : 'Delete comment'}
-                    onClick={() =>
-                      handleCommentsChange(commentInputs.filter((_, i) => i !== idx))
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </GanttAccordion>
+      />
     </div>
   );
 }

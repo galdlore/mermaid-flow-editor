@@ -1,5 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import { sanitizeRenderedSvg } from './mermaidRender';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { initializeMock, renderMock } = vi.hoisted(() => ({
+  initializeMock: vi.fn(),
+  renderMock: vi.fn(),
+}));
+
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: initializeMock,
+    render: renderMock,
+  },
+}));
+
+import {
+  clearMermaidRenderCache,
+  renderMermaidSvg,
+  sanitizeRenderedSvg,
+} from './mermaidRender';
 
 describe('sanitizeRenderedSvg', () => {
   it('strips dangerous tags, event attributes, and unsafe hrefs while keeping safe SVG content', () => {
@@ -40,5 +57,55 @@ describe('sanitizeRenderedSvg', () => {
   it('returns empty string when input contains no svg element', () => {
     expect(sanitizeRenderedSvg('')).toBe('');
     expect(sanitizeRenderedSvg('<div>not an svg</div>')).toBe('');
+  });
+});
+
+describe('renderMermaidSvg dynamic loading and error handling', () => {
+  beforeEach(() => {
+    clearMermaidRenderCache();
+    renderMock.mockReset();
+  });
+
+  it('initializes mermaid once across concurrent calls, sanitizes SVG output, and caches results', async () => {
+    renderMock
+      .mockResolvedValueOnce({
+        svg: '<svg onload="evil()"><script>bad()</script><text>first</text></svg>',
+      })
+      .mockResolvedValueOnce({
+        svg: '<svg><text>second</text></svg>',
+      });
+
+    const [first, second] = await Promise.all([
+      renderMermaidSvg('m-1', 'flowchart TD\nA-->B'),
+      renderMermaidSvg('m-2', 'flowchart TD\nC-->D'),
+    ]);
+
+    expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(initializeMock).toHaveBeenCalledWith({
+      startOnLoad: false,
+      theme: 'default',
+      securityLevel: 'strict',
+    });
+    expect(first.error).toBeNull();
+    expect(first.svg).not.toContain('<script');
+    expect(first.svg).not.toContain('onload');
+    expect(first.svg).toContain('first');
+    expect(second.error).toBeNull();
+    expect(second.svg).toContain('second');
+
+    const cached = await renderMermaidSvg('m-1-repeat', 'flowchart TD\nA-->B');
+    expect(cached).toEqual(first);
+    expect(renderMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns an error message without throwing when mermaid.render rejects', async () => {
+    renderMock.mockRejectedValueOnce(new Error('Syntax error in text'));
+
+    const result = await renderMermaidSvg('m-err', 'invalid syntax');
+
+    expect(result).toEqual({
+      svg: '',
+      error: 'Syntax error in text',
+    });
   });
 });

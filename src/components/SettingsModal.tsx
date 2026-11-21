@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import '../styles/modal-dialogs.css';
 import { Check, KeyRound, Lock, ShieldCheck, Trash2, Wifi, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { TAB_SIZE_OPTIONS, type TabSizeOption } from '../utils/markdownTabIndent';

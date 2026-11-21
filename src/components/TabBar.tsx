@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { FileText, Plus, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 import type { DocumentTab } from '../utils/documentTabs';
@@ -14,7 +14,43 @@ export interface TabBarProps {
   onNewTab: () => void;
 }
 
-export default function TabBar({
+function shallowEqualTitles(
+  a: Record<string, string>,
+  b: Record<string, string>
+): boolean {
+  if (a === b) return true;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+function areTabBarPropsEqual(prev: TabBarProps, next: TabBarProps): boolean {
+  if (
+    prev.activeTabId !== next.activeTabId ||
+    prev.switcherOpen !== next.switcherOpen ||
+    prev.onCloseSwitcher !== next.onCloseSwitcher ||
+    prev.onSelectTab !== next.onSelectTab ||
+    prev.onCloseTab !== next.onCloseTab ||
+    prev.onNewTab !== next.onNewTab ||
+    prev.tabs.length !== next.tabs.length
+  ) {
+    return false;
+  }
+  for (let i = 0; i < prev.tabs.length; i++) {
+    const p = prev.tabs[i];
+    const n = next.tabs[i];
+    if (p.id !== n.id || p.filePath !== n.filePath || p.isDirty !== n.isDirty) {
+      return false;
+    }
+  }
+  return shallowEqualTitles(prev.displayTitles, next.displayTitles);
+}
+
+const TabBar = memo(function TabBar({
   tabs,
   activeTabId,
   displayTitles,
@@ -195,4 +231,6 @@ export default function TabBar({
       )}
     </>
   );
-}
+}, areTabBarPropsEqual);
+
+export default TabBar;

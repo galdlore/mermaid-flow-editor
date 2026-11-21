@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { filterForbiddenChars } from '../utils/inputSafeguard';
 
 export interface GuardedInputProps {
@@ -10,6 +10,8 @@ export interface GuardedInputProps {
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
+  onBlur?: () => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }
 
 /**
@@ -24,6 +26,8 @@ export default function GuardedInput({
   placeholder,
   ariaLabel,
   className,
+  onBlur,
+  onKeyDown,
 }: GuardedInputProps) {
   const isComposingRef = useRef(false);
   const clearTimerRef = useRef<number | null>(null);
@@ -97,12 +101,14 @@ export default function GuardedInput({
           }
           applySafeguard(nextRaw);
         }}
+        onKeyDown={onKeyDown}
         onBlur={() => {
           if (clearTimerRef.current !== null) {
             window.clearTimeout(clearTimerRef.current);
             clearTimerRef.current = null;
           }
           setBlockedChars([]);
+          onBlur?.();
         }}
       />
       {blockedChars.length > 0 && (

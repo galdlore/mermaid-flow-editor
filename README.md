@@ -1,6 +1,6 @@
 # Mermaid Flow Editor
 
-GUI操作でMarkdown文書と15種類のMermaid図を編集できるエディタです。Windows向けデスクトップアプリ（Electron）、ブラウザから使えるDocker版、および[Chromeウェブストア](https://chromewebstore.google.com/detail/mermaid-flow-editor/acglgnfjffdmajcdkhcdgjpbdpfmgcek)で公開中のChrome拡張機能版として利用できます。
+GUI操作でMarkdown文書と20種類のMermaid図を編集できるエディタです。Windows向けデスクトップアプリ（Electron）、ブラウザから使えるDocker版、および[Chromeウェブストア](https://chromewebstore.google.com/detail/mermaid-flow-editor/acglgnfjffdmajcdkhcdgjpbdpfmgcek)で公開中のChrome拡張機能版として利用できます。
 
 詳しい機能と設計の仕様は[機能および設計仕様書](docs/SPECIFICATION.md)にまとめています。
 
@@ -12,7 +12,7 @@ GUI操作でMarkdown文書と15種類のMermaid図を編集できるエディタ
 | 複数タブとファイルドロップ | 複数ファイルをタブで切り替えでき、`.md`や`.markdown`や`.txt`を画面へドロップすると新しいタブで開けます |
 | 同名ファイルの連番整理 | 同じ名前のファイルを複数開いたときは、`sample (2).md`のように自動で番号を付けて区別します |
 | Markdown書式と表・リスト操作 | 見出し、太字、リスト、タスクリスト、引用、コード枠、表の挿入と行列編集を行え、2ペイン編集ではリストのEnter自動継続と連番振り直しに対応します |
-| 15種類のMermaid図GUI編集 | フローチャート、スイムレーン、ツリー、カンバン、円グラフ、XYチャート、構成図、マインドマップ、四象限、シーケンス、クラス、状態遷移、ER、ガント、C4図に対応しています |
+| 20種類のMermaid図GUI編集 | フローチャート、スイムレーン、ツリー、カンバン、円グラフ、XYチャート、構成図、マインドマップ、四象限、シーケンス、クラス、状態遷移、ER、ガント、C4、Gitグラフ、タイムライン、ブロック、レールロード、石川図に対応しています |
 | ファイルメニュー統合と各種出力 | 新規・開く・保存・別名保存・HTML出力・PDF出力・印刷を「ファイル」メニューへ整理して格納しています |
 | 暗号化対応クラウド読み書き | 設定画面からOpenCloudやWebDAV、カスタムHTTP APIを登録し、サブフォルダ閲覧、別名保存、パスフレーズ暗号化保持（AES-256-GCM）を行えます |
 | 使い方ガイドと設定メニュー | ツールバー右上の設定ボタンからTabインデント数や保存先設定を開け、ヘルプボタンから使い方ガイドを新しいタブで開けます |

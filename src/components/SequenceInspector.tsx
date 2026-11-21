@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
 import {
-  COLOR_PALETTE_ITEMS,
-  InspectorCollapsibleSection,
-} from './InspectorCollapsibleSection';
+  InspectorBulkControls,
+  InspectorColorPalette,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_SEQUENCE_ALIAS_CHARS_REGEX,
   FORBIDDEN_SEQUENCE_ID_CHARS_REGEX,
@@ -127,7 +129,6 @@ export default function SequenceInspector({
 
   const participants = sequenceData.participants;
   const boxes = sequenceData.boxes ?? [];
-  const comments = sequenceData.comments ?? [];
 
   const selectedLocation = useMemo(
     () => findSequenceStepLocation(sequenceData.steps, selectedStepId),
@@ -151,7 +152,6 @@ export default function SequenceInspector({
   const [participantIdDraft, setParticipantIdDraft] = useState(
     selectedParticipant?.id ?? ''
   );
-  const [commentInputs, setCommentInputs] = useState<string[]>(comments);
   const [openSections, setOpenSections] = useState<Record<SequenceSectionKey, boolean>>({
     step: true,
     participants: true,
@@ -162,10 +162,6 @@ export default function SequenceInspector({
   useEffect(() => {
     setParticipantIdDraft(selectedParticipant?.id ?? '');
   }, [selectedParticipant?.id]);
-
-  useEffect(() => {
-    setCommentInputs(sequenceData.comments ?? []);
-  }, [sequenceData.comments]);
 
   useEffect(() => {
     if (selectedStepId) {
@@ -365,15 +361,6 @@ export default function SequenceInspector({
     });
   };
 
-  const handleCommentsChange = (nextComments: string[]): void => {
-    setCommentInputs(nextComments);
-    const hasContent = nextComments.some((line) => line.trim() !== '');
-    onChange({
-      ...sequenceData,
-      comments: hasContent ? nextComments : undefined,
-    });
-  };
-
   const messageSnapshot =
     selectedStep?.kind === 'message'
       ? activationAnalysis.snapshotsByStepId[selectedStep.id]
@@ -381,17 +368,7 @@ export default function SequenceInspector({
 
   return (
     <div className="inspector-panel">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded
-            ? t.inspector.collapseAllSections
-            : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       <InspectorCollapsibleSection
         title={s.stepSection}
@@ -663,29 +640,16 @@ export default function SequenceInspector({
             </label>
 
             {selectedStep.blockType === 'rect' ? (
-              <div className="inspector-field">
-                <span>{s.blockColorField}</span>
-                <div className="color-palette-grid">
-                  {COLOR_PALETTE_ITEMS.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      className={`color-swatch ${
-                        (selectedStep.color ?? '#eff6ff') === item.value
-                          ? 'is-active'
-                          : ''
-                      }`}
-                      style={{ backgroundColor: item.value }}
-                      title={t.inspector.colors[item.key]}
-                      onClick={() =>
-                        updateSelectedStep((step) =>
-                          step.kind === 'block' ? { ...step, color: item.value } : step
-                        )
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
+              <InspectorColorPalette
+                label={s.blockColorField}
+                value={selectedStep.color ?? '#eff6ff'}
+                allowClear={false}
+                onChange={(nextColor) =>
+                  updateSelectedStep((step) =>
+                    step.kind === 'block' ? { ...step, color: nextColor } : step
+                  )
+                }
+              />
             ) : (
               <label className="inspector-field">
                 <span>{s.blockLabelField}</span>
@@ -937,28 +901,11 @@ export default function SequenceInspector({
                       <Trash2 size={13} />
                     </button>
                   </div>
-                  <div className="color-palette-grid">
-                    <button
-                      type="button"
-                      className={`color-swatch is-transparent ${
-                        !box.color ? 'is-active' : ''
-                      }`}
-                      title={s.noColorOption}
-                      onClick={() => updateBox(box.id, { color: undefined })}
-                    />
-                    {COLOR_PALETTE_ITEMS.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        className={`color-swatch ${
-                          box.color === item.value ? 'is-active' : ''
-                        }`}
-                        style={{ backgroundColor: item.value }}
-                        title={t.inspector.colors[item.key]}
-                        onClick={() => updateBox(box.id, { color: item.value })}
-                      />
-                    ))}
-                  </div>
+                  <InspectorColorPalette
+                    value={box.color}
+                    clearTitle={s.noColorOption}
+                    onChange={(color) => updateBox(box.id, { color })}
+                  />
                 </div>
               ))}
             </div>
@@ -1002,25 +949,21 @@ export default function SequenceInspector({
         </label>
       </InspectorCollapsibleSection>
 
-      <InspectorCollapsibleSection
+      <InspectorCommentsSection
         title={s.commentsSection}
-        badgeText={comments.length > 0 ? comments.length : undefined}
+        fieldLabel={s.commentsField}
+        placeholder={s.commentsPlaceholder}
+        comments={sequenceData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <label className="inspector-field">
-          <span>{s.commentsField}</span>
-          <textarea
-            className="inspector-comments-textarea"
-            rows={4}
-            placeholder={s.commentsPlaceholder}
-            value={commentInputs.join('\n')}
-            onChange={(e) =>
-              handleCommentsChange(e.target.value.split('\n'))
-            }
-          />
-        </label>
-      </InspectorCollapsibleSection>
+        rows={4}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...sequenceData,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

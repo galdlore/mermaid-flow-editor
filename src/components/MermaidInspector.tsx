@@ -8,6 +8,10 @@ import {
   STROKE_COLOR_PALETTE_ITEMS,
 } from './InspectorCollapsibleSection';
 import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
+import {
   FORBIDDEN_CLASS_NAME_CHARS_REGEX,
   FORBIDDEN_LABEL_CHARS_REGEX,
   FORBIDDEN_URL_CHARS_REGEX,
@@ -456,17 +460,6 @@ export default function MermaidInspector({
     });
   };
 
-  const handleCommentsChange = (rawText: string): void => {
-    const lines = rawText.split(/\r?\n/);
-    const hasContent = lines.some((line) => line.trim().length > 0);
-    onChange({
-      ...diagramData,
-      comments: hasContent ? lines : undefined,
-    });
-  };
-
-  const commentLineCount = (diagramData.comments ?? []).filter((c) => c.trim().length > 0).length;
-
   const subgraphsOrLanesSection = (
     <InspectorCollapsibleSection
       title={isSwimlane ? t.inspector.swimlane.lanesHeading : t.inspector.subgraphsHeading}
@@ -686,22 +679,7 @@ export default function MermaidInspector({
 
   return (
     <aside className="inspector-panel">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSectionsOpen(true)}
-        >
-          {t.inspector.expandAllSections}
-        </button>
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSectionsOpen(false)}
-        >
-          {t.inspector.collapseAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls mode="dual" onSetAll={setAllSectionsOpen} />
 
       {isSwimlane && subgraphsOrLanesSection}
 
@@ -1283,23 +1261,19 @@ export default function MermaidInspector({
         </div>
       </InspectorCollapsibleSection>
 
-      <InspectorCollapsibleSection
+      <InspectorCommentsSection
         title={t.inspector.commentsHeading}
-        badgeText={commentLineCount > 0 ? commentLineCount : undefined}
+        placeholder={t.inspector.commentsPlaceholder}
+        comments={diagramData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <label className="inspector-field">
-          <span>{t.inspector.commentsField}</span>
-          <textarea
-            className="inspector-comments-textarea"
-            rows={3}
-            value={(diagramData.comments ?? []).join('\n')}
-            onChange={(event) => handleCommentsChange(event.target.value)}
-            placeholder={t.inspector.commentsPlaceholder}
-          />
-        </label>
-      </InspectorCollapsibleSection>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...diagramData,
+            comments: nextComments,
+          })
+        }
+      />
     </aside>
   );
 }

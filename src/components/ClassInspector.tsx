@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowLeftRight, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
 import {
-  COLOR_PALETTE_ITEMS,
-  InspectorCollapsibleSection,
-} from './InspectorCollapsibleSection';
+  CommitIdInput,
+  InspectorBulkControls,
+  InspectorColorPalette,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_CLASS_GENERIC_CHARS_REGEX,
   FORBIDDEN_CLASS_ID_CHARS_REGEX,
@@ -65,10 +68,6 @@ export default function ClassInspector({
   const notes = classData.notes ?? [];
 
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [classIdDraft, setClassIdDraft] = useState(selectedClass?.id ?? '');
-  const [commentInputs, setCommentInputs] = useState<string[]>(
-    classData.comments ?? []
-  );
   const [openSections, setOpenSections] = useState<Record<ClassSectionKey, boolean>>({
     class: true,
     relation: true,
@@ -78,7 +77,6 @@ export default function ClassInspector({
   });
 
   useEffect(() => {
-    setClassIdDraft(selectedClass?.id ?? '');
     if (!selectedClass) {
       setSelectedMemberId(null);
       return;
@@ -89,10 +87,6 @@ export default function ClassInspector({
         : selectedClass.members[0]?.id ?? null
     );
   }, [selectedClass]);
-
-  useEffect(() => {
-    setCommentInputs(classData.comments ?? []);
-  }, [classData.comments]);
 
   useEffect(() => {
     if (selectedClassId) {
@@ -141,10 +135,10 @@ export default function ClassInspector({
     });
   };
 
-  const commitClassIdRename = (): void => {
-    if (!selectedClass) return;
+  const commitClassIdRename = (rawNext: string): string => {
+    if (!selectedClass) return '';
     const oldId = selectedClass.id;
-    const baseNext = sanitizeClassId(classIdDraft, oldId);
+    const baseNext = sanitizeClassId(rawNext, oldId);
     const otherIds = new Set(
       classData.classes.filter((item) => item.id !== oldId).map((item) => item.id)
     );
@@ -154,9 +148,8 @@ export default function ClassInspector({
       uniqueNext = `${baseNext}_${suffix++}`;
     }
 
-    setClassIdDraft(uniqueNext);
     if (uniqueNext === oldId) {
-      return;
+      return oldId;
     }
 
     const nextNotes = notes.map((n) =>
@@ -176,6 +169,7 @@ export default function ClassInspector({
       ...(nextNotes.length > 0 ? { notes: nextNotes } : {}),
     });
     onSelectClass(uniqueNext);
+    return uniqueNext;
   };
 
   const handleDeleteSelectedClass = (): void => {
@@ -308,29 +302,9 @@ export default function ClassInspector({
     });
   };
 
-  const comments = classData.comments ?? [];
-  const handleCommentsChange = (lines: string[]): void => {
-    setCommentInputs(lines);
-    const cleaned = lines.map((line) => line.trim()).filter((line) => line.length > 0);
-    onChange({
-      ...classData,
-      comments: cleaned.length > 0 ? cleaned : undefined,
-    });
-  };
-
   return (
     <div className="inspector-panel">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded
-            ? t.inspector.collapseAllSections
-            : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       <InspectorCollapsibleSection
         title={c.classSection}
@@ -342,16 +316,14 @@ export default function ClassInspector({
           <p className="inspector-hint">{c.selectClassPrompt}</p>
         ) : (
           <>
-            <div className="inspector-field" onBlur={commitClassIdRename}>
-              <span>{c.classIdField}</span>
-              <GuardedInput
-                value={classIdDraft}
-                placeholder="User"
-                forbiddenRegex={FORBIDDEN_CLASS_ID_CHARS_REGEX}
-                formatError={safeguard.classIdErrorChars}
-                onChangeValue={setClassIdDraft}
-              />
-            </div>
+            <CommitIdInput
+              label={c.classIdField}
+              value={selectedClass.id}
+              placeholder="User"
+              forbiddenRegex={FORBIDDEN_CLASS_ID_CHARS_REGEX}
+              formatError={safeguard.classIdErrorChars}
+              onCommit={commitClassIdRename}
+            />
 
             <label className="inspector-field">
               <span>{c.classLabelField}</span>
@@ -422,35 +394,12 @@ export default function ClassInspector({
               </select>
             </label>
 
-            <div className="inspector-field">
-              <span>{c.classColorField}</span>
-              <div className="color-palette-grid">
-                <button
-                  type="button"
-                  className={`color-swatch is-transparent ${
-                    !selectedClass.color ? 'is-active' : ''
-                  }`}
-                  title={c.noColorOption}
-                  onClick={() =>
-                    updateSelectedClass((cls) => ({ ...cls, color: undefined }))
-                  }
-                />
-                {COLOR_PALETTE_ITEMS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={`color-swatch ${
-                      selectedClass.color === item.value ? 'is-active' : ''
-                    }`}
-                    style={{ backgroundColor: item.value }}
-                    title={t.inspector.colors[item.key]}
-                    onClick={() =>
-                      updateSelectedClass((cls) => ({ ...cls, color: item.value }))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={c.classColorField}
+              value={selectedClass.color}
+              clearTitle={c.noColorOption}
+              onChange={(color) => updateSelectedClass((cls) => ({ ...cls, color }))}
+            />
 
             <div className="er-attrs-editor">
               <div className="inspector-section-subhead">
@@ -909,23 +858,21 @@ export default function ClassInspector({
         </label>
       </InspectorCollapsibleSection>
 
-      <InspectorCollapsibleSection
+      <InspectorCommentsSection
         title={c.commentsSection}
-        badgeText={comments.length > 0 ? comments.length : undefined}
+        fieldLabel={c.commentsField}
+        placeholder={c.commentsPlaceholder}
+        comments={classData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <label className="inspector-field">
-          <span>{c.commentsField}</span>
-          <textarea
-            className="inspector-comments-textarea"
-            rows={4}
-            placeholder={c.commentsPlaceholder}
-            value={commentInputs.join('\n')}
-            onChange={(ev) => handleCommentsChange(ev.target.value.split('\n'))}
-          />
-        </label>
-      </InspectorCollapsibleSection>
+        rows={4}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...classData,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

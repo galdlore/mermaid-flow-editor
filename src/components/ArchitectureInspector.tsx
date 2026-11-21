@@ -1,7 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_ARCHITECTURE_ICON_CHARS_REGEX,
   FORBIDDEN_ARCHITECTURE_TITLE_CHARS_REGEX,
@@ -37,49 +42,6 @@ const BUILTIN_ICON_PRESETS = [
   'unknown',
   'blank',
 ] as const;
-
-interface ArchAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}
-
-function ArchAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  headerAction,
-  children,
-}: ArchAccordionProps) {
-  return (
-    <section
-      className={`inspector-section inspector-accordion ${isOpen ? 'is-open' : 'is-collapsed'}`}
-    >
-      <div className="inspector-section-header inspector-accordion-header">
-        <button
-          type="button"
-          className="inspector-accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="inspector-accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="inspector-section-count">{countBadge}</span>
-          )}
-        </button>
-        {headerAction && (
-          <div className="inspector-accordion-actions">{headerAction}</div>
-        )}
-      </div>
-      {isOpen && <div className="inspector-accordion-body">{children}</div>}
-    </section>
-  );
-}
 
 function nextId(prefix: string, usedIds: Iterable<string>): string {
   const used = new Set(usedIds);
@@ -151,6 +113,17 @@ export default function ArchitectureInspector({
   const toggleSection = (key: ArchSectionKey): void => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const setAllSections = (open: boolean): void => {
+    setOpenSections({
+      node: open,
+      edges: open,
+      groups: open,
+      layout: open,
+      comments: open,
+    });
+  };
+  const allExpanded = Object.values(openSections).every(Boolean);
 
   const updateSelectedNode = (
     updater: (prev: NonNullable<typeof selectedNode>) => NonNullable<typeof selectedNode>
@@ -356,10 +329,12 @@ export default function ArchitectureInspector({
 
   return (
     <div className="inspector-content">
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
+
       {/* Selected Node */}
-      <ArchAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.architecture.nodeSection}
-        countBadge={architectureData.nodes.length}
+        badgeText={architectureData.nodes.length}
         isOpen={openSections.node}
         onToggle={() => toggleSection('node')}
       >
@@ -552,12 +527,12 @@ export default function ArchitectureInspector({
             )}
           </>
         )}
-      </ArchAccordion>
+      </InspectorCollapsibleSection>
 
       {/* Edges */}
-      <ArchAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.architecture.edgesSection}
-        countBadge={architectureData.edges.length}
+        badgeText={architectureData.edges.length}
         isOpen={openSections.edges}
         onToggle={() => toggleSection('edges')}
         headerAction={
@@ -785,12 +760,12 @@ export default function ArchitectureInspector({
             )}
           </>
         )}
-      </ArchAccordion>
+      </InspectorCollapsibleSection>
 
       {/* Groups */}
-      <ArchAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.architecture.groupsSection}
-        countBadge={architectureData.groups.length}
+        badgeText={architectureData.groups.length}
         isOpen={openSections.groups}
         onToggle={() => toggleSection('groups')}
         headerAction={
@@ -912,12 +887,12 @@ export default function ArchitectureInspector({
             })}
           </div>
         )}
-      </ArchAccordion>
+      </InspectorCollapsibleSection>
 
       {/* Layout & Alignment */}
-      <ArchAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.architecture.layoutSection}
-        countBadge={architectureData.alignments?.length ?? 0}
+        badgeText={architectureData.alignments?.length ?? 0}
         isOpen={openSections.layout}
         onToggle={() => toggleSection('layout')}
       >
@@ -1064,36 +1039,23 @@ export default function ArchitectureInspector({
             </div>
           ))}
         </div>
-      </ArchAccordion>
+      </InspectorCollapsibleSection>
 
       {/* Comments */}
-      <ArchAccordion
+      <InspectorCommentsSection
         title={t.inspector.architecture.commentsSection}
-        countBadge={architectureData.comments?.length ?? 0}
+        fieldLabel={t.inspector.architecture.commentsLabel}
+        placeholder={t.inspector.architecture.commentsPlaceholder}
+        comments={architectureData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <div className="field-group">
-          <label className="field-label">
-            {t.inspector.architecture.commentsLabel}
-          </label>
-          <textarea
-            className="field-textarea"
-            rows={3}
-            placeholder={t.inspector.architecture.commentsPlaceholder}
-            value={(architectureData.comments ?? []).join('\n')}
-            onChange={(e) => {
-              const lines = e.target.value
-                .split(/\r?\n/)
-                .filter((line) => line.trim() !== '');
-              onChange({
-                ...architectureData,
-                comments: lines.length > 0 ? lines : undefined,
-              });
-            }}
-          />
-        </div>
-      </ArchAccordion>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...architectureData,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

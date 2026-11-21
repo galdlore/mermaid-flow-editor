@@ -1,18 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  ChevronDown,
-  ChevronRight,
   FilePlus,
   FolderPlus,
-  Plus,
   Trash2,
 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import { FORBIDDEN_LABEL_CHARS_REGEX } from '../utils/inputSafeguard';
 import type {
   TreeViewDiagramData,
@@ -42,70 +44,23 @@ export interface TreeViewInspectorProps {
 
 type TreeSectionKey = 'item' | 'settings' | 'comments';
 
-interface TreeAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}
-
-function TreeAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  headerAction,
-  children,
-}: TreeAccordionProps) {
-  return (
-    <section className={`inspector-section accordion-section ${isOpen ? 'is-open' : ''}`}>
-      <div className="accordion-header-row">
-        <button
-          type="button"
-          className="accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          <span className="accordion-chevron" aria-hidden="true">
-            {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          </span>
-          <span className="accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="accordion-badge">{countBadge}</span>
-          )}
-        </button>
-        {headerAction && <div className="accordion-extra-action">{headerAction}</div>}
-      </div>
-      {isOpen && <div className="accordion-body">{children}</div>}
-    </section>
-  );
-}
-
 export default function TreeViewInspector({
   treeData,
   selectedNodeId,
   onChange,
   onSelectNode,
 }: TreeViewInspectorProps) {
-  const { lang, t } = useI18n();
+  const { t } = useI18n();
   const tv = t.inspector.treeView;
   const nodes = treeData.nodes;
   const selectedIndex = nodes.findIndex((n) => n.id === selectedNodeId);
   const selectedNode = selectedIndex >= 0 ? nodes[selectedIndex] : null;
-  const comments = treeData.comments ?? [];
 
-  const [commentInputs, setCommentInputs] = useState<string[]>(comments);
   const [openSections, setOpenSections] = useState<Record<TreeSectionKey, boolean>>({
     item: true,
     settings: true,
     comments: false,
   });
-
-  useEffect(() => {
-    setCommentInputs(treeData.comments ?? []);
-  }, [treeData.comments]);
 
   const toggleSection = (key: TreeSectionKey): void => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -169,31 +124,14 @@ export default function TreeViewInspector({
     });
   };
 
-  const handleCommentsChange = (nextComments: string[]): void => {
-    setCommentInputs(nextComments);
-    const hasContent = nextComments.some((c) => c.trim() !== '');
-    onChange({
-      ...treeData,
-      comments: hasContent ? nextComments : undefined,
-    });
-  };
-
   return (
     <div className="mermaid-inspector">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="btn-link-subtle"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded ? t.inspector.collapseAllSections : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       {/* 1. 選択中アイテムの編集 */}
-      <TreeAccordion
+      <InspectorCollapsibleSection
         title={tv.selectedItemHeading}
-        countBadge={nodes.length}
+        badgeText={nodes.length}
         isOpen={openSections.item}
         onToggle={() => toggleSection('item')}
       >
@@ -393,10 +331,10 @@ export default function TreeViewInspector({
         ) : (
           <p className="hint-text">{tv.selectItemHint}</p>
         )}
-      </TreeAccordion>
+      </InspectorCollapsibleSection>
 
       {/* 2. ツリー表示設定 */}
-      <TreeAccordion
+      <InspectorCollapsibleSection
         title={tv.settingsHeading}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
@@ -496,65 +434,22 @@ export default function TreeViewInspector({
             />
           </div>
         </div>
-      </TreeAccordion>
+      </InspectorCollapsibleSection>
 
       {/* 3. コメント */}
-      <TreeAccordion
+      <InspectorCommentsSection
         title={t.inspector.commentsHeading}
-        countBadge={commentInputs.filter((c) => c.trim() !== '').length}
+        placeholder={t.inspector.commentsPlaceholder}
+        comments={treeData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-        headerAction={
-          <button
-            type="button"
-            className="btn-secondary btn-xs"
-            onClick={() => {
-              if (!openSections.comments) {
-                setOpenSections((prev) => ({ ...prev, comments: true }));
-              }
-              handleCommentsChange([...commentInputs, '']);
-            }}
-          >
-            <Plus size={13} />
-            <span>{lang === 'ja' ? '追加' : 'Add'}</span>
-          </button>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...treeData,
+            comments: nextComments,
+          })
         }
-      >
-        <div className="field-group">
-          <label>{t.inspector.commentsField}</label>
-          {commentInputs.length === 0 ? (
-            <p className="hint-text">{t.inspector.commentsPlaceholder}</p>
-          ) : (
-            <div className="edge-list">
-              {commentInputs.map((commentText, idx) => (
-                <div key={idx} className="comment-row-item">
-                  <GuardedInput
-                    value={commentText}
-                    forbiddenRegex={FORBIDDEN_LABEL_CHARS_REGEX}
-                    formatError={t.inspector.safeguard.syntaxErrorChars}
-                    placeholder={t.inspector.commentsPlaceholder}
-                    onChangeValue={(nextVal) =>
-                      handleCommentsChange(
-                        commentInputs.map((c, i) => (i === idx ? nextVal : c))
-                      )
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn-icon-danger"
-                    title={lang === 'ja' ? 'コメントを削除' : 'Delete comment'}
-                    onClick={() =>
-                      handleCommentsChange(commentInputs.filter((_, i) => i !== idx))
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </TreeAccordion>
+      />
     </div>
   );
 }

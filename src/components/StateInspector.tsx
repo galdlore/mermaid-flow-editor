@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
 import {
-  COLOR_PALETTE_ITEMS,
-  InspectorCollapsibleSection,
-} from './InspectorCollapsibleSection';
+  CommitIdInput,
+  InspectorBulkControls,
+  InspectorColorPalette,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_STATE_ID_CHARS_REGEX,
   FORBIDDEN_STATE_LABEL_CHARS_REGEX,
@@ -61,10 +64,6 @@ export default function StateInspector({
     null;
   const notes = stateData.notes ?? [];
 
-  const [stateIdDraft, setStateIdDraft] = useState(selectedState?.id ?? '');
-  const [commentInputs, setCommentInputs] = useState<string[]>(
-    stateData.comments ?? []
-  );
   const [openSections, setOpenSections] = useState<Record<StateSectionKey, boolean>>({
     state: true,
     transition: true,
@@ -72,14 +71,6 @@ export default function StateInspector({
     settings: false,
     comments: false,
   });
-
-  useEffect(() => {
-    setStateIdDraft(selectedState?.id ?? '');
-  }, [selectedState]);
-
-  useEffect(() => {
-    setCommentInputs(stateData.comments ?? []);
-  }, [stateData.comments]);
 
   useEffect(() => {
     if (selectedStateId) {
@@ -144,13 +135,12 @@ export default function StateInspector({
     });
   };
 
-  const commitStateIdRename = (): void => {
-    if (!selectedState) return;
+  const commitStateIdRename = (rawNext: string): string => {
+    if (!selectedState) return '';
     const oldId = selectedState.id;
-    const sanitized = sanitizeStateId(stateIdDraft);
+    const sanitized = sanitizeStateId(rawNext);
     if (sanitized === oldId) {
-      setStateIdDraft(oldId);
-      return;
+      return oldId;
     }
 
     const usedIds = new Set(
@@ -182,6 +172,7 @@ export default function StateInspector({
       ...(nextNotes.length > 0 ? { notes: nextNotes } : {}),
     });
     onSelectState(uniqueNext);
+    return uniqueNext;
   };
 
   const handleStateKindChange = (nextKind: StateKind): void => {
@@ -312,18 +303,6 @@ export default function StateInspector({
     });
   };
 
-  const comments = stateData.comments ?? [];
-  const handleCommentsChange = (lines: string[]): void => {
-    setCommentInputs(lines);
-    const cleaned = lines
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    onChange({
-      ...stateData,
-      comments: cleaned.length > 0 ? cleaned : undefined,
-    });
-  };
-
   const renderEndpointOptions = () => (
     <>
       <option value={START_END_STATE_ID}>{sText.startEndLabel}</option>
@@ -337,17 +316,7 @@ export default function StateInspector({
 
   return (
     <div className="inspector-panel">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded
-            ? t.inspector.collapseAllSections
-            : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       <InspectorCollapsibleSection
         title={sText.stateSection}
@@ -359,16 +328,14 @@ export default function StateInspector({
           <p className="inspector-hint">{sText.selectStatePrompt}</p>
         ) : (
           <>
-            <div className="inspector-field" onBlur={commitStateIdRename}>
-              <span>{sText.stateIdField}</span>
-              <GuardedInput
-                value={stateIdDraft}
-                placeholder="Idle"
-                forbiddenRegex={FORBIDDEN_STATE_ID_CHARS_REGEX}
-                formatError={safeguard.stateIdErrorChars}
-                onChangeValue={setStateIdDraft}
-              />
-            </div>
+            <CommitIdInput
+              label={sText.stateIdField}
+              value={selectedState.id}
+              placeholder="Idle"
+              forbiddenRegex={FORBIDDEN_STATE_ID_CHARS_REGEX}
+              formatError={safeguard.stateIdErrorChars}
+              onCommit={commitStateIdRename}
+            />
 
             <label className="inspector-field">
               <span>{sText.stateKindField}</span>
@@ -467,42 +434,17 @@ export default function StateInspector({
               </label>
             )}
 
-            <div className="inspector-field">
-              <span>{sText.stateColorField}</span>
-              <div className="color-palette-grid">
-                <button
-                  type="button"
-                  className={`color-swatch-btn is-default ${
-                    !selectedState.color ? 'is-active' : ''
-                  }`}
-                  title={sText.noColorOption}
-                  onClick={() =>
-                    updateSelectedState((st) => ({ ...st, color: undefined }))
-                  }
-                >
-                  ×
-                </button>
-                {COLOR_PALETTE_ITEMS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={`color-swatch-btn ${
-                      selectedState.color === item.value ? 'is-active' : ''
-                    }`}
-                    style={{ backgroundColor: item.value }}
-                    title={t.inspector.colors[item.key]}
-                    onClick={() =>
-                      updateSelectedState((st) => ({ ...st, color: item.value }))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={sText.stateColorField}
+              value={selectedState.color}
+              clearTitle={sText.noColorOption}
+              onChange={(color) => updateSelectedState((st) => ({ ...st, color }))}
+            />
 
             <div className="inspector-actions-row">
               <button
                 type="button"
-                className="inspector-secondary-btn"
+                className="btn-secondary btn-xs"
                 onClick={handleQuickAddTransition}
               >
                 <Plus size={13} />
@@ -510,7 +452,7 @@ export default function StateInspector({
               </button>
               <button
                 type="button"
-                className="inspector-danger-btn"
+                className="btn-danger-outline"
                 onClick={handleDeleteSelectedState}
               >
                 <Trash2 size={13} />
@@ -602,7 +544,7 @@ export default function StateInspector({
             <div className="inspector-actions-row">
               <button
                 type="button"
-                className="inspector-secondary-btn"
+                className="btn-secondary btn-xs"
                 onClick={() =>
                   updateSelectedTransition((tr) => ({
                     ...tr,
@@ -616,7 +558,7 @@ export default function StateInspector({
               </button>
               <button
                 type="button"
-                className="inspector-danger-btn"
+                className="btn-danger-outline"
                 onClick={handleDeleteSelectedTransition}
               >
                 <Trash2 size={13} />
@@ -637,7 +579,7 @@ export default function StateInspector({
           <span />
           <button
             type="button"
-            className="inspector-mini-btn"
+            className="btn-secondary btn-xs"
             disabled={stateData.states.length === 0}
             onClick={handleAddNote}
           >
@@ -750,24 +692,20 @@ export default function StateInspector({
         </label>
       </InspectorCollapsibleSection>
 
-      <InspectorCollapsibleSection
+      <InspectorCommentsSection
         title={sText.commentsSection}
-        badgeText={comments.length > 0 ? String(comments.length) : undefined}
+        fieldLabel={sText.commentsField}
+        placeholder={sText.commentsPlaceholder}
+        comments={stateData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <label className="inspector-field">
-          <span>{sText.commentsField}</span>
-          <textarea
-            rows={3}
-            value={commentInputs.join('\n')}
-            placeholder={sText.commentsPlaceholder}
-            onChange={(e) =>
-              handleCommentsChange(e.target.value.split(/\r?\n/))
-            }
-          />
-        </label>
-      </InspectorCollapsibleSection>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...stateData,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

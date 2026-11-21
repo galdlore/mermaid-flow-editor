@@ -1,6 +1,6 @@
-import mermaid from 'mermaid';
+type MermaidApi = (typeof import('mermaid'))['default'];
 
-let initialized = false;
+let mermaidPromise: Promise<MermaidApi> | null = null;
 const MAX_RENDER_CACHE_ENTRIES = 64;
 const renderCache = new Map<string, { svg: string; error: string | null }>();
 
@@ -75,17 +75,25 @@ export function sanitizeRenderedSvg(rawSvg: string): string {
   return svgEl.outerHTML || new XMLSerializer().serializeToString(svgEl);
 }
 
-/** Mermaidの初期化をアプリ全体で一度だけ行う */
-export function ensureMermaidInitialized(): void {
-  if (initialized) {
-    return;
+/** Mermaidの遅延読み込みと初期化をアプリ全体で一度だけ行う */
+export async function ensureMermaidInitialized(): Promise<MermaidApi> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid')
+      .then((mod) => {
+        const api = mod.default;
+        api.initialize({
+          startOnLoad: false,
+          theme: 'default',
+          securityLevel: 'strict',
+        });
+        return api;
+      })
+      .catch((err) => {
+        mermaidPromise = null;
+        throw err;
+      });
   }
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'strict',
-  });
-  initialized = true;
+  return mermaidPromise;
 }
 
 /** 描画エラー時などにbody直下へ残る一時DOM要素を除去する */
@@ -113,9 +121,8 @@ export async function renderMermaidSvg(
     return cached;
   }
 
-  ensureMermaidInitialized();
-
   try {
+    const mermaid = await ensureMermaidInitialized();
     const result = await mermaid.render(renderId, code);
     const sanitized = { svg: sanitizeRenderedSvg(result.svg), error: null };
     if (sanitized.svg) {

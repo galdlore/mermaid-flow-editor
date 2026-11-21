@@ -3,7 +3,6 @@ import type {
   EdgeLineType,
   MermaidClassDefData,
   MermaidDiagramData,
-  MermaidDiagramType,
   MermaidDirection,
   MermaidEdgeData,
   MermaidNodeData,
@@ -17,6 +16,7 @@ import {
   formatGuiStateLine,
   sanitizeSingleLineComment,
 } from './mermaidEnvelope.ts';
+export { detectMermaidDiagramType } from './diagramDetect.ts';
 
 const VALID_DIRECTIONS: ReadonlyArray<MermaidDirection> = ['TD', 'LR', 'BT', 'RL'];
 const VALID_SHAPES: ReadonlyArray<NodeShape> = [
@@ -141,195 +141,6 @@ export function createDefaultSwimlaneData(lang: 'ja' | 'en' = 'ja'): MermaidDiag
       },
     ],
   };
-}
-
-export function detectMermaidDiagramType(code: string): MermaidDiagramType {
-  const lines = code.split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(GUI_STATE_PREFIX)) {
-      const jsonPart = trimmed.slice(GUI_STATE_PREFIX.length).trim();
-      try {
-        const parsed: unknown = JSON.parse(jsonPart);
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'treeView' &&
-          Array.isArray((parsed as { nodes?: unknown }).nodes)
-        ) {
-          return 'treeView';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'gantt' &&
-          Array.isArray((parsed as { tasks?: unknown }).tasks)
-        ) {
-          return 'gantt';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'kanban' &&
-          Array.isArray((parsed as { columns?: unknown }).columns)
-        ) {
-          return 'kanban';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'pie' &&
-          Array.isArray((parsed as { slices?: unknown }).slices)
-        ) {
-          return 'pie';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'xychart' &&
-          Array.isArray((parsed as { series?: unknown }).series)
-        ) {
-          return 'xychart';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'architecture' &&
-          Array.isArray((parsed as { nodes?: unknown }).nodes)
-        ) {
-          return 'architecture';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'mindmap' &&
-          Array.isArray((parsed as { nodes?: unknown }).nodes)
-        ) {
-          return 'mindmap';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'quadrantChart' &&
-          Array.isArray((parsed as { points?: unknown }).points)
-        ) {
-          return 'quadrantChart';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'sequence' &&
-          Array.isArray((parsed as { participants?: unknown }).participants) &&
-          Array.isArray((parsed as { steps?: unknown }).steps)
-        ) {
-          return 'sequence';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'er' &&
-          Array.isArray((parsed as { entities?: unknown }).entities) &&
-          Array.isArray((parsed as { relationships?: unknown }).relationships)
-        ) {
-          return 'er';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'class' &&
-          Array.isArray((parsed as { classes?: unknown }).classes) &&
-          Array.isArray((parsed as { relations?: unknown }).relations)
-        ) {
-          return 'class';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'state' &&
-          Array.isArray((parsed as { states?: unknown }).states) &&
-          Array.isArray((parsed as { transitions?: unknown }).transitions)
-        ) {
-          return 'state';
-        }
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          (parsed as { diagramType?: unknown }).diagramType === 'c4' &&
-          Array.isArray((parsed as { elements?: unknown }).elements) &&
-          Array.isArray((parsed as { boundaries?: unknown }).boundaries) &&
-          Array.isArray((parsed as { relations?: unknown }).relations)
-        ) {
-          return 'c4';
-        }
-        if (isValidDiagramData(parsed) && parsed.diagramType === 'swimlane') {
-          return 'swimlane';
-        }
-      } catch {
-        // JSON解析失敗時はテキスト判定へフォールバックする
-      }
-    }
-  }
-  let inFrontmatter = false;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (i === 0 && trimmed === '---') {
-      inFrontmatter = true;
-      continue;
-    }
-    if (inFrontmatter) {
-      if (trimmed === '---') {
-        inFrontmatter = false;
-      }
-      continue;
-    }
-    if (!trimmed || trimmed.startsWith('%%')) {
-      continue;
-    }
-    if (/^treeView-beta\b/i.test(trimmed)) {
-      return 'treeView';
-    }
-    if (/^gantt\b/i.test(trimmed)) {
-      return 'gantt';
-    }
-    if (/^kanban\b/i.test(trimmed)) {
-      return 'kanban';
-    }
-    if (/^pie\b/i.test(trimmed)) {
-      return 'pie';
-    }
-    if (/^xychart(-beta)?\b/i.test(trimmed)) {
-      return 'xychart';
-    }
-    if (/^architecture(?:-beta)?\b/i.test(trimmed)) {
-      return 'architecture';
-    }
-    if (/^mindmap\b/i.test(trimmed)) {
-      return 'mindmap';
-    }
-    if (/^quadrantChart\b/i.test(trimmed)) {
-      return 'quadrantChart';
-    }
-    if (/^sequenceDiagram\b/i.test(trimmed)) {
-      return 'sequence';
-    }
-    if (/^erDiagram\b/i.test(trimmed)) {
-      return 'er';
-    }
-    if (/^classDiagram(?:-v2)?\b/i.test(trimmed)) {
-      return 'class';
-    }
-    if (/^stateDiagram(?:-v2)?\b/i.test(trimmed)) {
-      return 'state';
-    }
-    if (/^C4(?:Context|Container|Component|Dynamic|Deployment)\b/i.test(trimmed)) {
-      return 'c4';
-    }
-    if (/^swimlane-beta\b/i.test(trimmed)) {
-      return 'swimlane';
-    }
-    break;
-  }
-  return 'flowchart';
 }
 
 function sanitizeId(rawId: string): string {

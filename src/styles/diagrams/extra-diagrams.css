@@ -1,0 +1,1002 @@
+/* =========================================================
+   GitGraph / Timeline / Block / Railroad / Ishikawa Canvases
+   ========================================================= */
+
+.gitgraph-canvas,
+.timeline-canvas,
+.block-canvas,
+.railroad-canvas,
+.ishikawa-canvas {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.gitgraph-toolbar,
+.timeline-toolbar,
+.block-toolbar,
+.railroad-toolbar,
+.ishikawa-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+}
+
+.gitgraph-canvas-scroll,
+.timeline-canvas-scroll,
+.block-canvas-scroll,
+.railroad-canvas-scroll,
+.ishikawa-canvas-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gitgraph-empty-state,
+.timeline-empty-state,
+.block-empty-state,
+.railroad-empty-state,
+.ishikawa-empty-state {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+}
+
+.gitgraph-title-banner,
+.timeline-title-banner,
+.railroad-title-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* GitGraph */
+.gitgraph-branch-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: #f8fafc;
+}
+
+.gitgraph-branch-legend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  background-color: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.gitgraph-ops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gitgraph-op-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gitgraph-op-row:hover {
+  border-color: #94a3b8;
+}
+
+.gitgraph-op-row.is-selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.gitgraph-op-row.has-warning {
+  border-color: #f59e0b;
+  background-color: #fffbeb;
+}
+
+.gitgraph-op-lane-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: 8px 0 0 8px;
+}
+
+.gitgraph-op-step-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 24px;
+}
+
+.gitgraph-op-kind-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: #e2e8f0;
+  color: #1e293b;
+}
+
+.gitgraph-op-kind-pill.is-commit {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.gitgraph-op-kind-pill.is-branch {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.gitgraph-op-kind-pill.is-merge {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+}
+
+.gitgraph-op-kind-pill.is-cherry-pick {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.gitgraph-op-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gitgraph-target-branch-pill {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+  background-color: var(--bg-surface);
+}
+
+.gitgraph-commit-id-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gitgraph-ctype-pill {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.gitgraph-ctype-pill.is-highlight {
+  background-color: #fef08a;
+  color: #854d0e;
+}
+
+.gitgraph-ctype-pill.is-reverse {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.gitgraph-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.gitgraph-warning-pill {
+  display: inline-flex;
+  align-items: center;
+  color: #d97706;
+}
+
+.gitgraph-active-branch-chip {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gitgraph-op-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.gitgraph-inspector-warning {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #f59e0b;
+  background-color: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Timeline */
+.timeline-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-section-band {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timeline-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.timeline-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.timeline-section-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.timeline-section-add-btn:hover {
+  background-color: #e2e8f0;
+}
+
+.timeline-periods-track.is-horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.timeline-periods-track.is-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-period-card {
+  min-width: 190px;
+  flex: 1 1 210px;
+  max-width: 300px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: #f8fafc;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.timeline-periods-track.is-vertical .timeline-period-card {
+  max-width: none;
+}
+
+.timeline-period-card:hover {
+  border-color: #94a3b8;
+}
+
+.timeline-period-card.is-selected {
+  border-color: var(--accent-color);
+  background-color: var(--bg-surface);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.timeline-period-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.timeline-period-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background-color: #dbeafe;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timeline-period-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.timeline-event-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.timeline-inline-add-event {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.timeline-inline-add-event:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.timeline-section-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.timeline-events-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.timeline-events-editor,
+.timeline-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.timeline-event-edit-row,
+.timeline-section-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.timeline-event-edit-row .guarded-input-wrapper,
+.timeline-section-edit-row .guarded-input-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Block Diagram */
+.block-cols-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.block-grid-preview {
+  display: grid;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.block-item-card,
+.block-group-card {
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.block-item-card.is-space {
+  border-style: dashed;
+  background-color: rgba(241, 245, 249, 0.7);
+}
+
+.block-group-card {
+  border-style: dashed;
+  border-color: #64748b;
+  background-color: #f8fafc;
+}
+
+.block-item-card.is-selected,
+.block-group-card.is-selected {
+  border-style: solid;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+.block-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.block-id-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: #e2e8f0;
+  color: #1e293b;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.block-span-pill {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.block-card-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.block-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.block-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.block-shape-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.block-space-text,
+.block-arrow-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.block-group-inner-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.block-group-empty {
+  padding: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+}
+
+.block-edges-strip {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.block-edges-strip-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.block-edges-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.block-edge-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.block-edges-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.block-edge-edit-card {
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.block-edge-endpoints-row,
+.block-edge-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.block-edge-endpoints-row select,
+.block-edge-meta-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-size: 12px;
+  background-color: var(--bg-surface);
+}
+
+.block-edge-meta-row .guarded-input-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Railroad Diagram */
+.railroad-syntax-select {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.railroad-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.railroad-rule-card {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.railroad-rule-card.is-rule-selected {
+  border-color: #93c5fd;
+}
+
+.railroad-rule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.railroad-rule-name {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1e3a8a;
+}
+
+.railroad-rule-op {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.railroad-rule-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.railroad-rule-diagram {
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.railroad-leaf-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1.5px solid #334155;
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+}
+
+.railroad-leaf-chip.is-nonterminal {
+  border-radius: 4px;
+  border-color: #2563eb;
+  background-color: #eff6ff;
+  color: #1e40af;
+}
+
+.railroad-leaf-chip.is-special {
+  border-style: dashed;
+  border-color: #9333ea;
+  background-color: #faf5ff;
+  color: #6b21a8;
+  font-style: italic;
+}
+
+.railroad-leaf-chip.is-selected {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.railroad-expr-box {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 8px;
+  background-color: rgba(248, 250, 252, 0.9);
+  cursor: pointer;
+}
+
+.railroad-expr-box.is-choice {
+  border-color: #fbbf24;
+  background-color: #fffbeb;
+}
+
+.railroad-expr-box.is-optional,
+.railroad-expr-box.is-oneOrMore,
+.railroad-expr-box.is-zeroOrMore {
+  border-color: #38bdf8;
+  background-color: #f0f9ff;
+}
+
+.railroad-expr-box.is-selected {
+  border-style: solid;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.railroad-box-tag {
+  align-self: flex-start;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: #e2e8f0;
+  color: #334155;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.railroad-seq-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.railroad-seq-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.railroad-seq-arrow {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.railroad-choice-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.railroad-choice-branch {
+  display: flex;
+  align-items: center;
+}
+
+.railroad-wrap-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.railroad-move-row,
+.railroad-node-container-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Ishikawa Fishbone Diagram */
+.ishikawa-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background-color: var(--border-color);
+  margin: 0 2px;
+}
+
+.ishikawa-fishbone-layout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 560px;
+  padding: 8px 4px;
+}
+
+.ishikawa-bones-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ishikawa-bones-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.ishikawa-bones-row.is-lower {
+  align-items: flex-start;
+}
+
+.ishikawa-bone-card {
+  flex: 1 1 170px;
+  min-width: 165px;
+  border: 1.5px solid;
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.ishikawa-bone-card.is-selected {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+.ishikawa-bone-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ishikawa-bone-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.ishikawa-bone-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.ishikawa-bone-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ishikawa-subcauses-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.ishikawa-subcause-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ishikawa-subcause-row:hover {
+  background-color: #f8fafc;
+}
+
+.ishikawa-subcause-row.is-selected {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.ishikawa-sub-branch {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.ishikawa-sub-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.ishikawa-sub-del {
+  opacity: 0.7;
+}
+
+.ishikawa-sub-del:hover {
+  opacity: 1;
+}
+
+.ishikawa-spine-bar {
+  display: flex;
+  align-items: center;
+  height: 12px;
+}
+
+.ishikawa-spine-line {
+  flex: 1;
+  height: 3px;
+  background-color: #334155;
+  border-radius: 2px;
+}
+
+.ishikawa-spine-arrow {
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 11px solid #334155;
+}
+
+.ishikawa-head-card {
+  width: 170px;
+  flex-shrink: 0;
+  padding: 12px 10px;
+  border: 2px solid #334155;
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.ishikawa-head-card.is-selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.ishikawa-head-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.ishikawa-head-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.ishikawa-role-badge {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #eff6ff;
+  color: #1e40af;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ishikawa-inspector-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ishikawa-inspector-move-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}

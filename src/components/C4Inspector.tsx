@@ -3,10 +3,15 @@ import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
 import {
-  COLOR_PALETTE_ITEMS,
   InspectorCollapsibleSection,
   STROKE_COLOR_PALETTE_ITEMS,
 } from './InspectorCollapsibleSection';
+import {
+  CommitIdInput,
+  InspectorBulkControls,
+  InspectorColorPalette,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_C4_ID_CHARS_REGEX,
   FORBIDDEN_C4_QUOTED_TEXT_CHARS_REGEX,
@@ -71,14 +76,6 @@ export default function C4Inspector({
   const selectedRelation =
     c4Data.relations.find((item) => item.id === selectedRelationId) ?? null;
 
-  const [elementIdDraft, setElementIdDraft] = useState(selectedElement?.id ?? '');
-  const [boundaryIdDraft, setBoundaryIdDraft] = useState(
-    selectedBoundary?.id ?? ''
-  );
-  const [commentInputs, setCommentInputs] = useState<string[]>(
-    c4Data.comments ?? []
-  );
-
   const [openSections, setOpenSections] = useState<Record<C4SectionKey, boolean>>({
     element: true,
     boundary: false,
@@ -86,18 +83,6 @@ export default function C4Inspector({
     settings: false,
     comments: false,
   });
-
-  useEffect(() => {
-    setElementIdDraft(selectedElement?.id ?? '');
-  }, [selectedElement]);
-
-  useEffect(() => {
-    setBoundaryIdDraft(selectedBoundary?.id ?? '');
-  }, [selectedBoundary]);
-
-  useEffect(() => {
-    setCommentInputs(c4Data.comments ?? []);
-  }, [c4Data.comments]);
 
   useEffect(() => {
     if (selectedElement) {
@@ -160,13 +145,12 @@ export default function C4Inspector({
     });
   };
 
-  const commitElementIdRename = (): void => {
-    if (!selectedElement) return;
+  const commitElementIdRename = (rawNext: string): string => {
+    if (!selectedElement) return '';
     const oldId = selectedElement.id;
-    const sanitized = sanitizeC4Id(elementIdDraft);
+    const sanitized = sanitizeC4Id(rawNext);
     if (sanitized === oldId) {
-      setElementIdDraft(oldId);
-      return;
+      return oldId;
     }
     const usedIds = new Set<string>([
       ...c4Data.elements.filter((e) => e.id !== oldId).map((e) => e.id),
@@ -190,6 +174,7 @@ export default function C4Inspector({
       })),
     });
     onSelectItem(uniqueNext);
+    return uniqueNext;
   };
 
   const handleDeleteSelectedElement = (): void => {
@@ -225,13 +210,12 @@ export default function C4Inspector({
     });
   };
 
-  const commitBoundaryIdRename = (): void => {
-    if (!selectedBoundary) return;
+  const commitBoundaryIdRename = (rawNext: string): string => {
+    if (!selectedBoundary) return '';
     const oldId = selectedBoundary.id;
-    const sanitized = sanitizeC4Id(boundaryIdDraft);
+    const sanitized = sanitizeC4Id(rawNext);
     if (sanitized === oldId) {
-      setBoundaryIdDraft(oldId);
-      return;
+      return oldId;
     }
     const usedIds = new Set<string>([
       ...c4Data.elements.map((e) => e.id),
@@ -255,6 +239,7 @@ export default function C4Inspector({
       ),
     });
     onSelectItem(uniqueNext);
+    return uniqueNext;
   };
 
   const handleDeleteSelectedBoundary = (): void => {
@@ -321,31 +306,9 @@ export default function C4Inspector({
     onSelectRelation(nextRelations[0]?.id ?? null);
   };
 
-  const comments = c4Data.comments ?? [];
-  const handleCommentsChange = (lines: string[]): void => {
-    setCommentInputs(lines);
-    const cleaned = lines
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    onChange({
-      ...c4Data,
-      comments: cleaned.length > 0 ? cleaned : undefined,
-    });
-  };
-
   return (
     <div className="inspector-panel">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded
-            ? t.inspector.collapseAllSections
-            : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       <InspectorCollapsibleSection
         title={c4Text.elementSection}
@@ -356,7 +319,7 @@ export default function C4Inspector({
           selectedElement ? (
             <button
               type="button"
-              className="inspector-mini-btn"
+              className="btn-secondary btn-xs"
               onClick={handleQuickAddRelation}
             >
               <Plus size={12} />
@@ -369,24 +332,13 @@ export default function C4Inspector({
           <p className="inspector-hint">{c4Text.selectElementPrompt}</p>
         ) : (
           <>
-            <div
-              className="inspector-field"
-              onBlur={commitElementIdRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitElementIdRename();
-                }
-              }}
-            >
-              <span>{c4Text.elementIdField}</span>
-              <GuardedInput
-                value={elementIdDraft}
-                forbiddenRegex={FORBIDDEN_C4_ID_CHARS_REGEX}
-                formatError={safeguard.c4IdErrorChars}
-                onChangeValue={setElementIdDraft}
-              />
-            </div>
+            <CommitIdInput
+              label={c4Text.elementIdField}
+              value={selectedElement.id}
+              forbiddenRegex={FORBIDDEN_C4_ID_CHARS_REGEX}
+              formatError={safeguard.c4IdErrorChars}
+              onCommit={commitElementIdRename}
+            />
 
             <label className="inspector-field">
               <span>{c4Text.elementKindField}</span>
@@ -516,122 +468,52 @@ export default function C4Inspector({
               />
             </label>
 
-            <div className="inspector-field">
-              <span>{c4Text.elementColorField}</span>
-              <div className="color-palette">
-                <button
-                  type="button"
-                  className={`color-swatch color-swatch-none ${
-                    !selectedElement.bgColor ? 'is-active' : ''
-                  }`}
-                  title={c4Text.noColorOption}
-                  onClick={() =>
-                    updateSelectedElement((el) => ({
-                      ...el,
-                      bgColor: undefined,
-                      ...(el.fontColor === '#0f172a'
-                        ? { fontColor: undefined }
-                        : {}),
-                    }))
-                  }
-                >
-                  ×
-                </button>
-                {COLOR_PALETTE_ITEMS.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={`color-swatch ${
-                      selectedElement.bgColor === item.value ? 'is-active' : ''
-                    }`}
-                    style={{ backgroundColor: item.value }}
-                    title={t.inspector.colors[item.key]}
-                    onClick={() =>
-                      updateSelectedElement((el) => ({
-                        ...el,
-                        bgColor: item.value,
-                        // パステル背景色選択時は白文字で視認性が落ちるため濃い文字色を自動補正する
-                        fontColor: el.fontColor ?? '#0f172a',
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={c4Text.elementColorField}
+              value={selectedElement.bgColor}
+              clearTitle={c4Text.noColorOption}
+              onChange={(nextBg) =>
+                updateSelectedElement((el) => ({
+                  ...el,
+                  bgColor: nextBg,
+                  // パステル背景色選択時は白文字で視認性が落ちるため濃い文字色を自動補正する
+                  fontColor: nextBg
+                    ? el.fontColor ?? '#0f172a'
+                    : el.fontColor === '#0f172a'
+                      ? undefined
+                      : el.fontColor,
+                }))
+              }
+            />
 
-            <div className="inspector-field">
-              <span>{c4Text.elementBorderColorField}</span>
-              <div className="color-palette">
-                {STROKE_COLOR_PALETTE_ITEMS.map((item) => {
-                  const isActive =
-                    item.value === ''
-                      ? !selectedElement.borderColor
-                      : selectedElement.borderColor === item.value;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={`color-swatch ${
-                        item.value === '' ? 'color-swatch-none' : ''
-                      } ${isActive ? 'is-active' : ''}`}
-                      style={
-                        item.value ? { backgroundColor: item.value } : undefined
-                      }
-                      title={t.inspector.strokeColors[item.key]}
-                      onClick={() =>
-                        updateSelectedElement((el) => ({
-                          ...el,
-                          borderColor: item.value || undefined,
-                        }))
-                      }
-                    >
-                      {item.value === '' ? '×' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={c4Text.elementBorderColorField}
+              value={selectedElement.borderColor}
+              items={STROKE_COLOR_PALETTE_ITEMS}
+              allowClear={false}
+              labelMap={t.inspector.strokeColors}
+              onChange={(borderColor) =>
+                updateSelectedElement((el) => ({ ...el, borderColor }))
+              }
+            />
 
-            <div className="inspector-field">
-              <span>{c4Text.elementTextColorField}</span>
-              <div className="color-palette">
-                {STROKE_COLOR_PALETTE_ITEMS.map((item) => {
-                  const isActive =
-                    item.value === ''
-                      ? !selectedElement.fontColor
-                      : selectedElement.fontColor === item.value;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={`color-swatch ${
-                        item.value === '' ? 'color-swatch-none' : ''
-                      } ${isActive ? 'is-active' : ''}`}
-                      style={
-                        item.value ? { backgroundColor: item.value } : undefined
-                      }
-                      title={
-                        item.value === ''
-                          ? c4Text.defaultTextColorOption
-                          : t.inspector.strokeColors[item.key]
-                      }
-                      onClick={() =>
-                        updateSelectedElement((el) => ({
-                          ...el,
-                          fontColor: item.value || undefined,
-                        }))
-                      }
-                    >
-                      {item.value === '' ? '×' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={c4Text.elementTextColorField}
+              value={selectedElement.fontColor}
+              items={STROKE_COLOR_PALETTE_ITEMS}
+              allowClear={false}
+              labelMap={{
+                ...t.inspector.strokeColors,
+                default: c4Text.defaultTextColorOption,
+              }}
+              onChange={(fontColor) =>
+                updateSelectedElement((el) => ({ ...el, fontColor }))
+              }
+            />
 
             <button
               type="button"
-              className="inspector-danger-btn"
+              className="btn-danger-outline"
               onClick={handleDeleteSelectedElement}
             >
               <Trash2 size={14} />
@@ -651,24 +533,13 @@ export default function C4Inspector({
           <p className="inspector-hint">{c4Text.selectBoundaryPrompt}</p>
         ) : (
           <>
-            <div
-              className="inspector-field"
-              onBlur={commitBoundaryIdRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitBoundaryIdRename();
-                }
-              }}
-            >
-              <span>{c4Text.boundaryIdField}</span>
-              <GuardedInput
-                value={boundaryIdDraft}
-                forbiddenRegex={FORBIDDEN_C4_ID_CHARS_REGEX}
-                formatError={safeguard.c4IdErrorChars}
-                onChangeValue={setBoundaryIdDraft}
-              />
-            </div>
+            <CommitIdInput
+              label={c4Text.boundaryIdField}
+              value={selectedBoundary.id}
+              forbiddenRegex={FORBIDDEN_C4_ID_CHARS_REGEX}
+              formatError={safeguard.c4IdErrorChars}
+              onCommit={commitBoundaryIdRename}
+            />
 
             <label className="inspector-field">
               <span>{c4Text.boundaryKindField}</span>
@@ -766,7 +637,7 @@ export default function C4Inspector({
 
             <button
               type="button"
-              className="inspector-danger-btn"
+              className="btn-danger-outline"
               onClick={handleDeleteSelectedBoundary}
             >
               <Trash2 size={14} />
@@ -904,76 +775,35 @@ export default function C4Inspector({
               />
             </label>
 
-            <div className="inspector-field">
-              <span>{c4Text.relLineColorField}</span>
-              <div className="color-palette">
-                {STROKE_COLOR_PALETTE_ITEMS.map((item) => {
-                  const isActive =
-                    item.value === ''
-                      ? !selectedRelation.lineColor
-                      : selectedRelation.lineColor === item.value;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={`color-swatch ${
-                        item.value === '' ? 'color-swatch-none' : ''
-                      } ${isActive ? 'is-active' : ''}`}
-                      style={
-                        item.value ? { backgroundColor: item.value } : undefined
-                      }
-                      title={t.inspector.strokeColors[item.key]}
-                      onClick={() =>
-                        updateSelectedRelation((r) => ({
-                          ...r,
-                          lineColor: item.value || undefined,
-                        }))
-                      }
-                    >
-                      {item.value === '' ? '×' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={c4Text.relLineColorField}
+              value={selectedRelation.lineColor}
+              items={STROKE_COLOR_PALETTE_ITEMS}
+              allowClear={false}
+              labelMap={t.inspector.strokeColors}
+              onChange={(lineColor) =>
+                updateSelectedRelation((r) => ({ ...r, lineColor }))
+              }
+            />
 
-            <div className="inspector-field">
-              <span>{c4Text.relTextColorField}</span>
-              <div className="color-palette">
-                {STROKE_COLOR_PALETTE_ITEMS.map((item) => {
-                  const isActive =
-                    item.value === ''
-                      ? !selectedRelation.textColor
-                      : selectedRelation.textColor === item.value;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={`color-swatch ${
-                        item.value === '' ? 'color-swatch-none' : ''
-                      } ${isActive ? 'is-active' : ''}`}
-                      style={
-                        item.value ? { backgroundColor: item.value } : undefined
-                      }
-                      title={t.inspector.strokeColors[item.key]}
-                      onClick={() =>
-                        updateSelectedRelation((r) => ({
-                          ...r,
-                          textColor: item.value || undefined,
-                        }))
-                      }
-                    >
-                      {item.value === '' ? '×' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={c4Text.relTextColorField}
+              value={selectedRelation.textColor}
+              items={STROKE_COLOR_PALETTE_ITEMS}
+              allowClear={false}
+              labelMap={{
+                ...t.inspector.strokeColors,
+                default: c4Text.defaultTextColorOption,
+              }}
+              onChange={(textColor) =>
+                updateSelectedRelation((r) => ({ ...r, textColor }))
+              }
+            />
 
             <div className="inspector-actions-row">
               <button
                 type="button"
-                className="inspector-secondary-btn"
+                className="btn-secondary btn-xs"
                 onClick={() =>
                   updateSelectedRelation((r) => ({
                     ...r,
@@ -987,7 +817,7 @@ export default function C4Inspector({
               </button>
               <button
                 type="button"
-                className="inspector-danger-btn"
+                className="btn-danger-outline"
                 onClick={handleDeleteSelectedRelation}
               >
                 <Trash2 size={13} />
@@ -1082,22 +912,20 @@ export default function C4Inspector({
         </label>
       </InspectorCollapsibleSection>
 
-      <InspectorCollapsibleSection
+      <InspectorCommentsSection
         title={c4Text.commentsSection}
-        badgeText={comments.length > 0 ? String(comments.length) : undefined}
+        fieldLabel={c4Text.commentsField}
+        placeholder={c4Text.commentsPlaceholder}
+        comments={c4Data.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <label className="inspector-field">
-          <span>{c4Text.commentsField}</span>
-          <textarea
-            rows={3}
-            value={commentInputs.join('\n')}
-            placeholder={c4Text.commentsPlaceholder}
-            onChange={(e) => handleCommentsChange(e.target.value.split(/\r?\n/))}
-          />
-        </label>
-      </InspectorCollapsibleSection>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...c4Data,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

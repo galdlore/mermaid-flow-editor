@@ -1,6 +1,6 @@
 {
   "name": "mermaid-gui-markdown-editor",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "private": true,
   "description": "Windows 11 GUI Markdown and Mermaid Editor",
   "main": "dist-electron/main.js",

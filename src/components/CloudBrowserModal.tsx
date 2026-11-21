@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import '../styles/modal-dialogs.css';
 import {
   ArrowUp,
   Check,

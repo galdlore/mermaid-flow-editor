@@ -1,14 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_KANBAN_LABEL_CHARS_REGEX,
   FORBIDDEN_KANBAN_META_CHARS_REGEX,
@@ -37,49 +35,6 @@ const PRIORITY_OPTIONS: ReadonlyArray<KanbanPriority> = [
   'Low',
   'Very Low',
 ];
-
-interface KanbanAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}
-
-function KanbanAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  headerAction,
-  children,
-}: KanbanAccordionProps) {
-  return (
-    <section
-      className={`inspector-section inspector-accordion ${isOpen ? 'is-open' : 'is-collapsed'}`}
-    >
-      <div className="inspector-section-header inspector-accordion-header">
-        <button
-          type="button"
-          className="inspector-accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="inspector-accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="inspector-section-count">{countBadge}</span>
-          )}
-        </button>
-        {headerAction && (
-          <div className="inspector-accordion-actions">{headerAction}</div>
-        )}
-      </div>
-      {isOpen && <div className="inspector-accordion-body">{children}</div>}
-    </section>
-  );
-}
 
 function nextUniqueId(prefix: string, usedIds: Set<string>): string {
   let num = 1;
@@ -229,26 +184,11 @@ export default function KanbanInspector({
 
   return (
     <aside className="mermaid-inspector">
-      <div className="inspector-accordion-toolbar">
-        <button
-          type="button"
-          className="inspector-accordion-bulk-btn"
-          onClick={() => setAllSections(true)}
-        >
-          {t.inspector.expandAllSections}
-        </button>
-        <button
-          type="button"
-          className="inspector-accordion-bulk-btn"
-          onClick={() => setAllSections(false)}
-        >
-          {t.inspector.collapseAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls mode="dual" onSetAll={setAllSections} />
 
-      <KanbanAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.kanban.cardHeading}
-        countBadge={kanbanData.cards.length}
+        badgeText={kanbanData.cards.length}
         isOpen={openSections.card}
         onToggle={() => toggleSection('card')}
         headerAction={
@@ -390,11 +330,11 @@ export default function KanbanInspector({
         ) : (
           <p className="inspector-hint">{t.inspector.kanban.selectCardHint}</p>
         )}
-      </KanbanAccordion>
+      </InspectorCollapsibleSection>
 
-      <KanbanAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.kanban.columnsHeading}
-        countBadge={kanbanData.columns.length}
+        badgeText={kanbanData.columns.length}
         isOpen={openSections.columns}
         onToggle={() => toggleSection('columns')}
         headerAction={
@@ -460,9 +400,9 @@ export default function KanbanInspector({
             ))}
           </div>
         )}
-      </KanbanAccordion>
+      </InspectorCollapsibleSection>
 
-      <KanbanAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.kanban.settingsHeading}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
@@ -515,37 +455,22 @@ export default function KanbanInspector({
             />
           </div>
         </div>
-      </KanbanAccordion>
+      </InspectorCollapsibleSection>
 
-      <KanbanAccordion
+      <InspectorCommentsSection
         title={t.inspector.commentsHeading}
-        countBadge={kanbanData.comments?.length ?? 0}
+        placeholder={t.inspector.commentsPlaceholder}
+        comments={kanbanData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <div className="inspector-field">
-          <label htmlFor="kanban-comments-textarea">
-            {t.inspector.commentsField}
-          </label>
-          <textarea
-            id="kanban-comments-textarea"
-            className="inspector-textarea"
-            rows={4}
-            value={(kanbanData.comments ?? []).join('\n')}
-            placeholder={t.inspector.commentsPlaceholder}
-            onChange={(event) => {
-              const nextComments = event.target.value
-                .split(/\r?\n/)
-                .map((line) => line.replace(/^\s*%%+\s?/, ''));
-              const hasContent = nextComments.some((l) => l.trim().length > 0);
-              onChange({
-                ...kanbanData,
-                comments: hasContent ? nextComments : undefined,
-              });
-            }}
-          />
-        </div>
-      </KanbanAccordion>
+        rows={4}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...kanbanData,
+            comments: nextComments,
+          })
+        }
+      />
     </aside>
   );
 }

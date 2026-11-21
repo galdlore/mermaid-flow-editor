@@ -1,14 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import { FORBIDDEN_PIE_LABEL_CHARS_REGEX } from '../utils/inputSafeguard';
 import type {
   PieDiagramData,
@@ -32,49 +30,6 @@ const LEGEND_POSITION_OPTIONS: ReadonlyArray<PieLegendPosition> = [
   'bottom',
   'center',
 ];
-
-interface PieAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}
-
-function PieAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  headerAction,
-  children,
-}: PieAccordionProps) {
-  return (
-    <section
-      className={`inspector-section inspector-accordion ${isOpen ? 'is-open' : 'is-collapsed'}`}
-    >
-      <div className="inspector-section-header inspector-accordion-header">
-        <button
-          type="button"
-          className="inspector-accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="inspector-accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="inspector-section-count">{countBadge}</span>
-          )}
-        </button>
-        {headerAction && (
-          <div className="inspector-accordion-actions">{headerAction}</div>
-        )}
-      </div>
-      {isOpen && <div className="inspector-accordion-body">{children}</div>}
-    </section>
-  );
-}
 
 function nextSliceId(slices: PieSliceData[]): string {
   const existing = new Set(slices.map((s) => s.id));
@@ -181,26 +136,11 @@ export default function PieInspector({
 
   return (
     <aside className="mermaid-inspector">
-      <div className="inspector-accordion-toolbar">
-        <button
-          type="button"
-          className="inspector-accordion-bulk-btn"
-          onClick={() => setAllSections(true)}
-        >
-          {t.inspector.expandAllSections}
-        </button>
-        <button
-          type="button"
-          className="inspector-accordion-bulk-btn"
-          onClick={() => setAllSections(false)}
-        >
-          {t.inspector.collapseAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls mode="dual" onSetAll={setAllSections} />
 
-      <PieAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.pie.sliceHeading}
-        countBadge={pieData.slices.length}
+        badgeText={pieData.slices.length}
         isOpen={openSections.slice}
         onToggle={() => toggleSection('slice')}
         headerAction={
@@ -285,11 +225,11 @@ export default function PieInspector({
         ) : (
           <p className="inspector-hint">{t.inspector.pie.selectSliceHint}</p>
         )}
-      </PieAccordion>
+      </InspectorCollapsibleSection>
 
-      <PieAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.pie.slicesListHeading}
-        countBadge={pieData.slices.length}
+        badgeText={pieData.slices.length}
         isOpen={openSections.slicesList}
         onToggle={() => toggleSection('slicesList')}
         headerAction={
@@ -369,9 +309,9 @@ export default function PieInspector({
             ))}
           </div>
         )}
-      </PieAccordion>
+      </InspectorCollapsibleSection>
 
-      <PieAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.pie.settingsHeading}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
@@ -497,37 +437,22 @@ export default function PieInspector({
             </select>
           </div>
         </div>
-      </PieAccordion>
+      </InspectorCollapsibleSection>
 
-      <PieAccordion
+      <InspectorCommentsSection
         title={t.inspector.commentsHeading}
-        countBadge={pieData.comments?.length ?? 0}
+        placeholder={t.inspector.commentsPlaceholder}
+        comments={pieData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <div className="inspector-field">
-          <label htmlFor="pie-comments-textarea">
-            {t.inspector.commentsField}
-          </label>
-          <textarea
-            id="pie-comments-textarea"
-            className="inspector-textarea"
-            rows={4}
-            value={(pieData.comments ?? []).join('\n')}
-            placeholder={t.inspector.commentsPlaceholder}
-            onChange={(event) => {
-              const nextComments = event.target.value
-                .split(/\r?\n/)
-                .map((line) => line.replace(/^\s*%%+\s?/, ''));
-              const hasContent = nextComments.some((l) => l.trim().length > 0);
-              onChange({
-                ...pieData,
-                comments: hasContent ? nextComments : undefined,
-              });
-            }}
-          />
-        </div>
-      </PieAccordion>
+        rows={4}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...pieData,
+            comments: nextComments,
+          })
+        }
+      />
     </aside>
   );
 }

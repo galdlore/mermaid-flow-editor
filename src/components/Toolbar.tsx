@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { memo, useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   Bold,
   CheckSquare,
@@ -71,7 +71,7 @@ export interface ToolbarProps {
   onOpenNewMermaid: () => void;
 }
 
-export default function Toolbar({
+const Toolbar = memo(function Toolbar({
   fileName,
   tabCount,
   isDirty,
@@ -565,4 +565,6 @@ export default function Toolbar({
       </div>
     </header>
   );
-}
+});
+
+export default Toolbar;

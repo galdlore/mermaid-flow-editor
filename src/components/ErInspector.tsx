@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowLeftRight, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
 import {
-  COLOR_PALETTE_ITEMS,
-  InspectorCollapsibleSection,
-} from './InspectorCollapsibleSection';
+  CommitIdInput,
+  InspectorBulkControls,
+  InspectorColorPalette,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_ER_ATTR_NAME_CHARS_REGEX,
   FORBIDDEN_ER_ATTR_TYPE_CHARS_REGEX,
@@ -60,8 +63,6 @@ export default function ErInspector({
     erData.relationships.find((item) => item.id === selectedRelationshipId) ?? null;
 
   const [selectedAttrId, setSelectedAttrId] = useState<string | null>(null);
-  const [entityIdDraft, setEntityIdDraft] = useState(selectedEntity?.id ?? '');
-  const [commentInputs, setCommentInputs] = useState<string[]>(erData.comments ?? []);
   const [openSections, setOpenSections] = useState<Record<ErSectionKey, boolean>>({
     entity: true,
     relationship: true,
@@ -70,7 +71,6 @@ export default function ErInspector({
   });
 
   useEffect(() => {
-    setEntityIdDraft(selectedEntity?.id ?? '');
     if (!selectedEntity) {
       setSelectedAttrId(null);
       return;
@@ -81,10 +81,6 @@ export default function ErInspector({
         : selectedEntity.attributes[0]?.id ?? null
     );
   }, [selectedEntity]);
-
-  useEffect(() => {
-    setCommentInputs(erData.comments ?? []);
-  }, [erData.comments]);
 
   useEffect(() => {
     if (selectedEntityId) {
@@ -132,10 +128,10 @@ export default function ErInspector({
     });
   };
 
-  const commitEntityIdRename = (): void => {
-    if (!selectedEntity) return;
+  const commitEntityIdRename = (rawNext: string): string => {
+    if (!selectedEntity) return '';
     const oldId = selectedEntity.id;
-    const baseNext = sanitizeErEntityId(entityIdDraft, oldId);
+    const baseNext = sanitizeErEntityId(rawNext, oldId);
     const otherIds = new Set(
       erData.entities.filter((item) => item.id !== oldId).map((item) => item.id)
     );
@@ -145,9 +141,8 @@ export default function ErInspector({
       uniqueNext = `${baseNext}_${suffix++}`;
     }
 
-    setEntityIdDraft(uniqueNext);
     if (uniqueNext === oldId) {
-      return;
+      return oldId;
     }
 
     onChange({
@@ -162,6 +157,7 @@ export default function ErInspector({
       })),
     });
     onSelectEntity(uniqueNext);
+    return uniqueNext;
   };
 
   const handleDeleteSelectedEntity = (): void => {
@@ -270,29 +266,9 @@ export default function ErInspector({
     onSelectRelationship(nextRelationships[0]?.id ?? null);
   };
 
-  const comments = erData.comments ?? [];
-  const handleCommentsChange = (lines: string[]): void => {
-    setCommentInputs(lines);
-    const cleaned = lines.map((line) => line.trim()).filter((line) => line.length > 0);
-    onChange({
-      ...erData,
-      comments: cleaned.length > 0 ? cleaned : undefined,
-    });
-  };
-
   return (
     <div className="inspector-panel">
-      <div className="inspector-accordion-controls">
-        <button
-          type="button"
-          className="inspector-accordion-ctrl-btn"
-          onClick={() => setAllSections(!allExpanded)}
-        >
-          {allExpanded
-            ? t.inspector.collapseAllSections
-            : t.inspector.expandAllSections}
-        </button>
-      </div>
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
       <InspectorCollapsibleSection
         title={e.entitySection}
@@ -304,16 +280,14 @@ export default function ErInspector({
           <p className="inspector-hint">{e.selectEntityPrompt}</p>
         ) : (
           <>
-            <div className="inspector-field" onBlur={commitEntityIdRename}>
-              <span>{e.entityIdField}</span>
-              <GuardedInput
-                value={entityIdDraft}
-                placeholder="CUSTOMER"
-                forbiddenRegex={FORBIDDEN_ER_ENTITY_ID_CHARS_REGEX}
-                formatError={safeguard.erEntityIdErrorChars}
-                onChangeValue={setEntityIdDraft}
-              />
-            </div>
+            <CommitIdInput
+              label={e.entityIdField}
+              value={selectedEntity.id}
+              placeholder="CUSTOMER"
+              forbiddenRegex={FORBIDDEN_ER_ENTITY_ID_CHARS_REGEX}
+              formatError={safeguard.erEntityIdErrorChars}
+              onCommit={commitEntityIdRename}
+            />
 
             <label className="inspector-field">
               <span>{e.entityAliasField}</span>
@@ -331,35 +305,12 @@ export default function ErInspector({
               />
             </label>
 
-            <div className="inspector-field">
-              <span>{e.entityColorField}</span>
-              <div className="color-palette-grid">
-                <button
-                  type="button"
-                  className={`color-swatch is-transparent ${
-                    !selectedEntity.color ? 'is-active' : ''
-                  }`}
-                  title={e.noColorOption}
-                  onClick={() =>
-                    updateSelectedEntity((ent) => ({ ...ent, color: undefined }))
-                  }
-                />
-                {COLOR_PALETTE_ITEMS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={`color-swatch ${
-                      selectedEntity.color === item.value ? 'is-active' : ''
-                    }`}
-                    style={{ backgroundColor: item.value }}
-                    title={t.inspector.colors[item.key]}
-                    onClick={() =>
-                      updateSelectedEntity((ent) => ({ ...ent, color: item.value }))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
+            <InspectorColorPalette
+              label={e.entityColorField}
+              value={selectedEntity.color}
+              clearTitle={e.noColorOption}
+              onChange={(color) => updateSelectedEntity((ent) => ({ ...ent, color }))}
+            />
 
             <div className="er-attrs-editor">
               <div className="inspector-section-subhead">
@@ -722,23 +673,21 @@ export default function ErInspector({
         </label>
       </InspectorCollapsibleSection>
 
-      <InspectorCollapsibleSection
+      <InspectorCommentsSection
         title={e.commentsSection}
-        badgeText={comments.length > 0 ? comments.length : undefined}
+        fieldLabel={e.commentsField}
+        placeholder={e.commentsPlaceholder}
+        comments={erData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <label className="inspector-field">
-          <span>{e.commentsField}</span>
-          <textarea
-            className="inspector-comments-textarea"
-            rows={4}
-            placeholder={e.commentsPlaceholder}
-            value={commentInputs.join('\n')}
-            onChange={(ev) => handleCommentsChange(ev.target.value.split('\n'))}
-          />
-        </label>
-      </InspectorCollapsibleSection>
+        rows={4}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...erData,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

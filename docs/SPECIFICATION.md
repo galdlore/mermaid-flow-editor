@@ -93,7 +93,7 @@ Mermaid Flow Editorは、Markdown文書の編集とMermaid図のGUI作成を1つ
 
 文書内の```` ```mermaid ````ブロックは`src/utils/markdownMermaidBlocks.ts`でCommonMarkフェンス規則に沿って抽出・置換されます。レイアウトメタデータは`src/utils/mermaidEnvelope.ts`を通じて`%% @gui-state: <JSON>`コメント行へ保存し、コメントなしの手書きMermaidコードも各コンバータでパースします。
 
-対応している図の種類は、フローチャート、スイムレーン図（`swimlane-beta`）、ツリービュー（`treeView-beta`）、カンバン、円グラフ、棒・折れ線グラフ（`xychart-beta`）、アーキテクチャ図（`architecture-beta`）、マインドマップ、四象限チャート、シーケンス図、クラス図、状態遷移図、ER図、ガントチャート、C4図（`C4Context`等）の全15種類です。
+対応している図の種類は、フローチャート、スイムレーン図（`swimlane-beta`）、ツリービュー（`treeView-beta`）、カンバン、円グラフ、棒・折れ線グラフ（`xychart-beta`）、アーキテクチャ図（`architecture-beta`）、マインドマップ、四象限チャート、シーケンス図、クラス図、状態遷移図、ER図、ガントチャート、C4図（`C4Context`等）、Gitグラフ（`gitGraph`）、タイムライン（`timeline`）、ブロック図（`block-beta`）、レールロード図（`railroad-beta`等4方言）、石川図（`ishikawa-beta`）の全20種類です。
 
 ## 6. テスト・ビルドおよびCI/CD仕様
 
@@ -119,13 +119,13 @@ Mermaid Flow Editorは、Markdown文書の編集とMermaid図のGUI作成を1つ
 
 | パス | 役割 |
 |---|---|
-| `src/components/` | UIコンポーネント群（ツールバー、タブバー、設定モーダル、クラウドブラウザ、各エディタ、15種類の図用キャンバスとインスペクタ） |
+| `src/components/` | UIコンポーネント群（ツールバー、タブバー、設定モーダル、クラウドブラウザ、各エディタ、20種類の図用キャンバスとインスペクタ） |
 | `src/hooks/` | クラウド設定・認証ロック管理カスタムフック（`useCloudStorage.ts`） |
 | `src/styles/` | モジュール分割されたCSS群（`base-editor.css`, `modals.css`, `diagrams.css`, `responsive-print.css`） |
 | `src/utils/` | Markdown/Mermaidパーサとジェネレータ群、WebDAV/暗号化ストレージ、タブ管理、ファイルアダプタ、HTML出力、SVGサニタイズ、単体テスト群 |
 | `src/test/` | Vitest用jsdomセットアップ（`setupVitest.ts`） |
 | `src/locales/` | 日本語（`ja.ts`）・英語（`en.ts`）・ガイドテンプレート群・型定義（`types.ts`） |
-| `src/types/` | 15種類の図データモデルおよびファイルI/O型定義（`editor.ts`） |
+| `src/types/` | 20種類の図データモデルおよびファイルI/O型定義（`editor.ts`） |
 | `electron/` | Electronメインプロセス（`main.ts`）およびプリロード（`preload.ts`） |
 | `chrome/` | Chrome拡張機能のバックグラウンドスクリプト（`background.ts`）およびビルド生成スクリプト（`build-extension.ts`） |
 | `docker/` | 静的配信用Nginx設定ファイル（`nginx.conf`） |

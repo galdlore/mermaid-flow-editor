@@ -1,7 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import GuardedInput from './GuardedInput';
+import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
+import {
+  InspectorBulkControls,
+  InspectorCommentsSection,
+} from './InspectorCommon';
 import {
   FORBIDDEN_MINDMAP_CLASS_CHARS_REGEX,
   FORBIDDEN_MINDMAP_ICON_CHARS_REGEX,
@@ -47,44 +52,6 @@ const ICON_PRESETS = [
 
 const CLASS_PRESETS = ['urgent', 'large', 'urgent large'];
 
-interface MindmapAccordionProps {
-  title: string;
-  countBadge?: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}
-
-function MindmapAccordion({
-  title,
-  countBadge,
-  isOpen,
-  onToggle,
-  children,
-}: MindmapAccordionProps) {
-  return (
-    <section
-      className={`inspector-section inspector-accordion ${isOpen ? 'is-open' : 'is-collapsed'}`}
-    >
-      <div className="inspector-section-header inspector-accordion-header">
-        <button
-          type="button"
-          className="inspector-accordion-trigger"
-          aria-expanded={isOpen}
-          onClick={onToggle}
-        >
-          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="inspector-accordion-title">{title}</span>
-          {typeof countBadge === 'number' && (
-            <span className="inspector-section-count">{countBadge}</span>
-          )}
-        </button>
-      </div>
-      {isOpen && <div className="inspector-accordion-body">{children}</div>}
-    </section>
-  );
-}
-
 export default function MindmapInspector({
   mindmapData,
   selectedNodeId,
@@ -113,6 +80,11 @@ export default function MindmapInspector({
   const toggleSection = (key: MindmapSectionKey): void => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const setAllSections = (open: boolean): void => {
+    setOpenSections({ node: open, settings: open, comments: open });
+  };
+  const allExpanded = Object.values(openSections).every(Boolean);
 
   const updateSelectedNode = (
     updater: (prev: MindmapNodeData) => MindmapNodeData
@@ -161,10 +133,12 @@ export default function MindmapInspector({
 
   return (
     <div className="inspector-content">
+      <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
+
       {/* Selected Topic */}
-      <MindmapAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.mindmap.nodeSection}
-        countBadge={nodes.length}
+        badgeText={nodes.length}
         isOpen={openSections.node}
         onToggle={() => toggleSection('node')}
       >
@@ -333,10 +307,10 @@ export default function MindmapInspector({
             {t.inspector.mindmap.selectNodeHint}
           </p>
         )}
-      </MindmapAccordion>
+      </InspectorCollapsibleSection>
 
       {/* Settings */}
-      <MindmapAccordion
+      <InspectorCollapsibleSection
         title={t.inspector.mindmap.settingsSection}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
@@ -374,36 +348,23 @@ export default function MindmapInspector({
             />
           </div>
         </div>
-      </MindmapAccordion>
+      </InspectorCollapsibleSection>
 
       {/* Comments */}
-      <MindmapAccordion
+      <InspectorCommentsSection
         title={t.inspector.mindmap.commentsSection}
-        countBadge={mindmapData.comments?.length ?? 0}
+        fieldLabel={t.inspector.mindmap.commentsField}
+        placeholder={t.inspector.mindmap.commentsPlaceholder}
+        comments={mindmapData.comments}
         isOpen={openSections.comments}
         onToggle={() => toggleSection('comments')}
-      >
-        <div className="field-group">
-          <label className="field-label">
-            {t.inspector.mindmap.commentsField}
-          </label>
-          <textarea
-            className="field-textarea"
-            rows={3}
-            placeholder={t.inspector.mindmap.commentsPlaceholder}
-            value={(mindmapData.comments ?? []).join('\n')}
-            onChange={(e) => {
-              const lines = e.target.value
-                .split(/\r?\n/)
-                .filter((line) => line.trim() !== '');
-              onChange({
-                ...mindmapData,
-                comments: lines.length > 0 ? lines : undefined,
-              });
-            }}
-          />
-        </div>
-      </MindmapAccordion>
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...mindmapData,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 }

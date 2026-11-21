@@ -1,29 +1,26 @@
 import {
-  forwardRef,
-  isValidElement,
-  useEffect,
-  useId,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
+  forwardRef, lazy, Suspense, useCallback, useDeferredValue, useEffect,
+  useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent,
 } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { ChevronDown, FileText, Pencil } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { ChevronDown, FileText } from 'lucide-react';
 import { useI18n } from '../i18n';
-import { renderMermaidSvg } from '../utils/mermaidRender';
-import WysiwygEditor, { type WysiwygEditorHandle } from './WysiwygEditor';
-import {
-  computeTabIndentEdit,
-  type TabSizeOption,
-} from '../utils/markdownTabIndent';
+import type { WysiwygEditorHandle } from './WysiwygEditor';
+import { computeTabIndentEdit, type TabSizeOption } from '../utils/markdownTabIndent';
 import { computeListContinueEdit } from '../utils/markdownListContinue';
 import { buildMarkdownLink, formatMarkdownLinkDestination } from '../utils/markdownLinks';
 import { extractMermaidBlocks } from '../utils/markdownMermaidBlocks';
 import { extractCleanPreviewHtml } from '../utils/htmlExport';
+
+const WysiwygEditor = lazy(() => import('./WysiwygEditor'));
+const loadMarkdownPreviewPane = () => import('./MarkdownPreviewPane');
+const MarkdownPreviewPane = lazy(loadMarkdownPreviewPane);
+
+function waitForRenderFlush(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
 
 function buildMarkdownTable(
   rows: number,
@@ -33,17 +30,14 @@ function buildMarkdownTable(
 ): string {
   const safeRows = Math.max(1, Math.min(20, rows));
   const safeCols = Math.max(1, Math.min(12, cols));
-
   const headers = Array.from({ length: safeCols }, (_, index) => getColHeader(index + 1));
   const dividers = Array.from({ length: safeCols }, () => '---');
   const bodyRow = Array.from({ length: safeCols }, () => bodyCell);
-
   const lines = [
     `| ${headers.join(' | ')} |`,
     `| ${dividers.join(' | ')} |`,
     ...Array.from({ length: safeRows }, () => `| ${bodyRow.join(' | ')} |`),
   ];
-
   return `\n${lines.join('\n')}\n`;
 }
 
@@ -67,6 +61,9 @@ export interface MarkdownEditorHandle {
   insertLinePrefix: (prefix: string) => void;
   activateEditMode: () => void;
   getExportablePreviewHtml: () => string;
+  getExportablePreviewHtmlAsync: () => Promise<string>;
+  preparePreviewForPrint: () => Promise<void>;
+  releaseExportPreview: () => void;
 }
 
 export interface MarkdownEditorProps {
@@ -83,69 +80,6 @@ export interface MarkdownEditorProps {
   tabCount?: number;
   isDirty?: boolean;
   onOpenTabSwitcher?: () => void;
-}
-
-interface MermaidPreviewBlockProps {
-  code: string;
-  blockIndex: number;
-  onEdit: (blockIndex: number, code: string) => void;
-}
-
-function MermaidPreviewBlock({ code, blockIndex, onEdit }: MermaidPreviewBlockProps) {
-  const { t } = useI18n();
-  const reactId = useId();
-  const [svg, setSvg] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const renderId = `mermaid_svg_${reactId.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
-
-    const renderDiagram = async (): Promise<void> => {
-      if (!code.trim()) {
-        if (!cancelled) {
-          setSvg('');
-          setError(t.editor.emptyMermaidError);
-        }
-        return;
-      }
-
-      const result = await renderMermaidSvg(renderId, code);
-      if (!cancelled) {
-        setSvg(result.svg);
-        setError(result.error);
-      }
-    };
-
-    void renderDiagram();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [code, reactId, t.editor.emptyMermaidError]);
-
-  return (
-    <div className="mermaid-preview-card" data-mermaid-block="true">
-      <button
-        type="button"
-        className="mermaid-edit-float-btn"
-        onClick={() => onEdit(blockIndex, code)}
-        title={t.editor.editDiagramTitle}
-      >
-        <Pencil size={14} />
-        <span>{t.editor.editDiagramLabel}</span>
-      </button>
-
-      {error ? (
-        <div className="mermaid-error-box">
-          <strong>{t.editor.renderErrorTitle}</strong>
-          <pre>{error}</pre>
-        </div>
-      ) : (
-        <div className="mermaid-svg-container" dangerouslySetInnerHTML={{ __html: svg }} />
-      )}
-    </div>
-  );
 }
 
 const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
@@ -171,8 +105,61 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const wysiwygRef = useRef<WysiwygEditorHandle>(null);
     const previewBodyRef = useRef<HTMLDivElement>(null);
-    const [mobilePane, setMobilePane] = useState<'wysiwyg' | 'edit' | 'preview'>('wysiwyg');
+    const [mobilePane, setMobilePane] = useState<'wysiwyg' | 'edit' | 'preview'>(() =>
+      editorMode === 'wysiwyg' ? 'wysiwyg' : 'edit'
+    );
+    const [forcePreviewForExport, setForcePreviewForExport] = useState(false);
     const prevEditorModeRef = useRef(editorMode);
+    const pendingMermaidCountRef = useRef(0);
+    const pendingWaitersRef = useRef<Array<() => void>>([]);
+
+    const handleMermaidPendingChange = useCallback((delta: 1 | -1): void => {
+      pendingMermaidCountRef.current = Math.max(0, pendingMermaidCountRef.current + delta);
+      if (pendingMermaidCountRef.current === 0 && pendingWaitersRef.current.length > 0) {
+        const waiters = pendingWaitersRef.current.splice(0);
+        for (const resolve of waiters) {
+          resolve();
+        }
+      }
+    }, []);
+
+    const waitForPendingMermaid = useCallback((timeoutMs = 2000): Promise<void> => {
+      if (pendingMermaidCountRef.current === 0) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(finish, timeoutMs);
+        pendingWaitersRef.current.push(finish);
+      });
+    }, []);
+
+    useEffect(() => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+      const handleBeforePrint = (): void => {
+        void loadMarkdownPreviewPane();
+        flushSync(() => {
+          setForcePreviewForExport(true);
+        });
+      };
+      const handleAfterPrint = (): void => {
+        setForcePreviewForExport(false);
+      };
+      window.addEventListener('beforeprint', handleBeforePrint);
+      window.addEventListener('afterprint', handleAfterPrint);
+      return () => {
+        window.removeEventListener('beforeprint', handleBeforePrint);
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+    }, []);
 
     useEffect(() => {
       if (prevEditorModeRef.current === editorMode) {
@@ -187,25 +174,51 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     }, [editorMode]);
 
     const mermaidBlocks = useMemo(() => extractMermaidBlocks(value), [value]);
+    const mermaidBlocksRef = useRef(mermaidBlocks);
+    mermaidBlocksRef.current = mermaidBlocks;
+
+    const deferredPreviewValue = useDeferredValue(value);
+    const shouldMountTextarea = editorMode === 'split' || mobilePane === 'edit';
+    const shouldMountPreview =
+      editorMode === 'split' || mobilePane === 'preview' || forcePreviewForExport;
+    const previewMarkdownValue = forcePreviewForExport ? value : deferredPreviewValue;
+
+    const ensurePreviewMountedAndRendered = useCallback(async (): Promise<boolean> => {
+      await loadMarkdownPreviewPane();
+      const needsTemporaryMount =
+        !shouldMountPreview || deferredPreviewValue !== value || !previewBodyRef.current;
+      if (needsTemporaryMount) {
+        flushSync(() => {
+          setForcePreviewForExport(true);
+        });
+      }
+      const deadline = Date.now() + 500;
+      while (!previewBodyRef.current && Date.now() < deadline) {
+        await waitForRenderFlush();
+      }
+      await waitForRenderFlush();
+      await waitForPendingMermaid(2000);
+      await waitForRenderFlush();
+      return needsTemporaryMount;
+    }, [
+      shouldMountPreview,
+      deferredPreviewValue,
+      value,
+      waitForPendingMermaid,
+    ]);
 
     const isWysiwygActive = (): boolean => {
-      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) {
+      if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 768px)')?.matches) {
         return mobilePane === 'wysiwyg';
       }
       return editorMode === 'wysiwyg';
     };
 
-    const applyEdit = (
-      nextValue: string,
-      selectionStart: number,
-      selectionEnd: number
-    ): void => {
+    const applyEdit = (nextValue: string, selectionStart: number, selectionEnd: number): void => {
       onChange(nextValue);
       requestAnimationFrame(() => {
         const textarea = textareaRef.current;
-        if (!textarea) {
-          return;
-        }
+        if (!textarea) return;
         textarea.focus();
         textarea.setSelectionRange(selectionStart, selectionEnd);
       });
@@ -217,32 +230,25 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
         onChange(value + text);
         return;
       }
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const nextValue = value.slice(0, start) + text + value.slice(end);
+      const { selectionStart: start, selectionEnd: end } = textarea;
       const nextCursor = start + text.length;
-      applyEdit(nextValue, nextCursor, nextCursor);
+      applyEdit(value.slice(0, start) + text + value.slice(end), nextCursor, nextCursor);
     };
 
-    const wrapTextareaSelection = (
-      prefix: string,
-      suffix: string,
-      placeholder: string
-    ): void => {
+    const wrapTextareaSelection = (prefix: string, suffix: string, placeholder: string): void => {
       const textarea = textareaRef.current;
       if (!textarea) {
         onChange(`${value}${prefix}${placeholder}${suffix}`);
         return;
       }
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const selected = value.slice(start, end);
-      const inner = selected || placeholder;
-      const inserted = `${prefix}${inner}${suffix}`;
-      const nextValue = value.slice(0, start) + inserted + value.slice(end);
+      const { selectionStart: start, selectionEnd: end } = textarea;
+      const inner = value.slice(start, end) || placeholder;
       const innerStart = start + prefix.length;
-      const innerEnd = innerStart + inner.length;
-      applyEdit(nextValue, innerStart, innerEnd);
+      applyEdit(
+        value.slice(0, start) + `${prefix}${inner}${suffix}` + value.slice(end),
+        innerStart,
+        innerStart + inner.length
+      );
     };
 
     const insertTextareaLinePrefix = (prefix: string): void => {
@@ -253,180 +259,160 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       }
       const start = textarea.selectionStart;
       const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-      const nextValue = value.slice(0, lineStart) + prefix + value.slice(lineStart);
       const nextCursor = start + prefix.length;
-      applyEdit(nextValue, nextCursor, nextCursor);
+      applyEdit(value.slice(0, lineStart) + prefix + value.slice(lineStart), nextCursor, nextCursor);
+    };
+
+    const runModeAction = (
+      wysiwygFn: (handle: WysiwygEditorHandle | null) => void,
+      textareaFn: () => void
+    ): void => {
+      if (isWysiwygActive()) {
+        wysiwygFn(wysiwygRef.current);
+        return;
+      }
+      textareaFn();
     };
 
     useImperativeHandle(
       ref,
       () => ({
-        applyHeading(level: 1 | 2 | 3) {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyHeading(level);
-            return;
-          }
-          insertTextareaLinePrefix(`${'#'.repeat(level)} `);
-        },
-        applyBold() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyBold();
-            return;
-          }
-          wrapTextareaSelection('**', '**', t.toolbar.boldPlaceholder);
-        },
-        applyItalic() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyItalic();
-            return;
-          }
-          wrapTextareaSelection('*', '*', t.toolbar.italicPlaceholder);
-        },
-        applyStrike() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyStrike();
-            return;
-          }
-          wrapTextareaSelection('~~', '~~', t.toolbar.strikePlaceholder);
-        },
-        applyLink() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyLink(t.toolbar.linkPlaceholder);
-            return;
-          }
-          wrapTextareaSelection('[', '](https://example.com)', t.toolbar.linkPlaceholder);
-        },
-        applyBulletList() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyBulletList();
-            return;
-          }
-          insertTextareaLinePrefix('- ');
-        },
-        applyOrderedList() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyOrderedList();
-            return;
-          }
-          insertTextareaLinePrefix('1. ');
-        },
-        applyTaskList() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyTaskList();
-            return;
-          }
-          insertTextareaLinePrefix('- [ ] ');
-        },
-        applyQuote() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyQuote();
-            return;
-          }
-          insertTextareaLinePrefix('> ');
-        },
-        applyCodeBlock() {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.applyCodeBlock();
-            return;
-          }
-          insertAtTextareaCursor(t.toolbar.codeBlockSnippet);
-        },
-        insertTable(rows: number, cols: number) {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.insertTable(rows, cols);
-            return;
-          }
-          insertAtTextareaCursor(
-            buildMarkdownTable(
-              rows,
-              cols,
-              t.toolbar.tableColHeader,
-              t.toolbar.tableBodyCell
-            )
-          );
-        },
-        insertMermaidBlock(code: string) {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.insertMermaidBlock(code);
-            return;
-          }
-          insertAtTextareaCursor(`\n\`\`\`mermaid\n${code}\n\`\`\`\n`);
-        },
-        insertLink(label: string, href: string, isPreEncodedUrl?: boolean) {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.insertLink(
-              label,
-              formatMarkdownLinkDestination(href, isPreEncodedUrl)
-            );
-            return;
-          }
-          insertAtTextareaCursor(buildMarkdownLink(label, href, isPreEncodedUrl));
-        },
+        applyHeading: (level) =>
+          runModeAction(
+            (w) => w?.applyHeading(level),
+            () => insertTextareaLinePrefix(`${'#'.repeat(level)} `)
+          ),
+        applyBold: () =>
+          runModeAction(
+            (w) => w?.applyBold(),
+            () => wrapTextareaSelection('**', '**', t.toolbar.boldPlaceholder)
+          ),
+        applyItalic: () =>
+          runModeAction(
+            (w) => w?.applyItalic(),
+            () => wrapTextareaSelection('*', '*', t.toolbar.italicPlaceholder)
+          ),
+        applyStrike: () =>
+          runModeAction(
+            (w) => w?.applyStrike(),
+            () => wrapTextareaSelection('~~', '~~', t.toolbar.strikePlaceholder)
+          ),
+        applyLink: () =>
+          runModeAction(
+            (w) => w?.applyLink(t.toolbar.linkPlaceholder),
+            () => wrapTextareaSelection('[', '](https://example.com)', t.toolbar.linkPlaceholder)
+          ),
+        applyBulletList: () =>
+          runModeAction(
+            (w) => w?.applyBulletList(),
+            () => insertTextareaLinePrefix('- ')
+          ),
+        applyOrderedList: () =>
+          runModeAction(
+            (w) => w?.applyOrderedList(),
+            () => insertTextareaLinePrefix('1. ')
+          ),
+        applyTaskList: () =>
+          runModeAction(
+            (w) => w?.applyTaskList(),
+            () => insertTextareaLinePrefix('- [ ] ')
+          ),
+        applyQuote: () =>
+          runModeAction(
+            (w) => w?.applyQuote(),
+            () => insertTextareaLinePrefix('> ')
+          ),
+        applyCodeBlock: () =>
+          runModeAction(
+            (w) => w?.applyCodeBlock(),
+            () => insertAtTextareaCursor(t.toolbar.codeBlockSnippet)
+          ),
+        insertTable: (rows, cols) =>
+          runModeAction(
+            (w) => w?.insertTable(rows, cols),
+            () =>
+              insertAtTextareaCursor(
+                buildMarkdownTable(rows, cols, t.toolbar.tableColHeader, t.toolbar.tableBodyCell)
+              )
+          ),
+        insertMermaidBlock: (code) =>
+          runModeAction(
+            (w) => w?.insertMermaidBlock(code),
+            () => insertAtTextareaCursor(`\n\`\`\`mermaid\n${code}\n\`\`\`\n`)
+          ),
+        insertLink: (label, href, isPreEncodedUrl) =>
+          runModeAction(
+            (w) => w?.insertLink(label, formatMarkdownLinkDestination(href, isPreEncodedUrl)),
+            () => insertAtTextareaCursor(buildMarkdownLink(label, href, isPreEncodedUrl))
+          ),
         getSelectedText() {
           if (isWysiwygActive()) {
             return wysiwygRef.current?.getSelectedText() ?? '';
           }
           const textarea = textareaRef.current;
-          if (!textarea) {
+          if (!textarea || textarea.selectionStart === textarea.selectionEnd) {
             return '';
           }
-          const { selectionStart, selectionEnd } = textarea;
-          if (selectionStart === selectionEnd) {
-            return '';
-          }
-          return value.slice(selectionStart, selectionEnd).trim();
+          return value.slice(textarea.selectionStart, textarea.selectionEnd).trim();
         },
-        insertAtCursor(text: string) {
-          if (isWysiwygActive()) {
-            wysiwygRef.current?.insertText(text);
-            return;
-          }
-          insertAtTextareaCursor(text);
-        },
+        insertAtCursor: (text) =>
+          runModeAction(
+            (w) => w?.insertText(text),
+            () => insertAtTextareaCursor(text)
+          ),
         wrapSelection: wrapTextareaSelection,
         insertLinePrefix: insertTextareaLinePrefix,
         activateEditMode() {
-          if (editorMode === 'wysiwyg') {
-            setMobilePane('wysiwyg');
-            requestAnimationFrame(() => {
+          const isWysiwyg = editorMode === 'wysiwyg';
+          setMobilePane(isWysiwyg ? 'wysiwyg' : 'edit');
+          requestAnimationFrame(() => {
+            if (isWysiwyg) {
               wysiwygRef.current?.focus();
-            });
-          } else {
-            setMobilePane('edit');
-            requestAnimationFrame(() => {
+            } else {
               textareaRef.current?.focus();
+            }
+          });
+        },
+        getExportablePreviewHtml: () => extractCleanPreviewHtml(previewBodyRef.current),
+        async getExportablePreviewHtmlAsync() {
+          const mountedTemporarily = await ensurePreviewMountedAndRendered();
+          const html = extractCleanPreviewHtml(previewBodyRef.current);
+          if (mountedTemporarily) {
+            flushSync(() => {
+              setForcePreviewForExport(false);
             });
           }
+          return html;
         },
-        getExportablePreviewHtml() {
-          return extractCleanPreviewHtml(previewBodyRef.current);
+        async preparePreviewForPrint() {
+          await ensurePreviewMountedAndRendered();
+        },
+        releaseExportPreview() {
+          setForcePreviewForExport(false);
         },
       }),
-      [value, onChange, editorMode, mobilePane, t]
+      [value, onChange, editorMode, mobilePane, ensurePreviewMountedAndRendered, t]
     );
 
-    const resolveBlockIndex = (startLine: number | undefined, codeText: string): number => {
-      if (typeof startLine === 'number') {
-        const byLine = mermaidBlocks.find(
-          (block) => startLine >= block.startLine && startLine <= block.endLine
-        );
-        if (byLine) {
-          return byLine.index;
+    const resolveBlockIndex = useCallback(
+      (startLine: number | undefined, codeText: string): number => {
+        const blocks = mermaidBlocksRef.current;
+        if (typeof startLine === 'number') {
+          const byLine = blocks.find(
+            (block) => startLine >= block.startLine && startLine <= block.endLine
+          );
+          if (byLine) {
+            return byLine.index;
+          }
         }
-      }
-      const normalized = codeText.replace(/\r\n/g, '\n').trimEnd();
-      const byCode = mermaidBlocks.find(
-        (block) => block.code.replace(/\r\n/g, '\n').trimEnd() === normalized
-      );
-      return byCode ? byCode.index : 0;
-    };
-
-    const isMermaidPreChild = (children: ReactNode): boolean => {
-      if (!isValidElement<{ className?: string }>(children)) {
-        return false;
-      }
-      return Boolean(children.props.className && /language-mermaid\b/.test(children.props.className));
-    };
+        const normalized = codeText.replace(/\r\n/g, '\n').trimEnd();
+        const byCode = blocks.find(
+          (block) => block.code.replace(/\r\n/g, '\n').trimEnd() === normalized
+        );
+        return byCode ? byCode.index : 0;
+      },
+      []
+    );
 
     const handleTextareaKeyDown = (
       event: KeyboardEvent<HTMLTextAreaElement>
@@ -467,6 +453,16 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       }
     };
 
+    const mobilePaneButtons: Array<{
+      id: 'wysiwyg' | 'edit' | 'preview';
+      label: string;
+      mode?: 'wysiwyg' | 'split';
+    }> = [
+      { id: 'wysiwyg', label: t.editor.mobileWysiwygLabel, mode: 'wysiwyg' },
+      { id: 'edit', label: t.editor.mobileEditLabel, mode: 'split' },
+      { id: 'preview', label: t.editor.mobilePreviewLabel },
+    ];
+
     return (
       <div className="editor-workspace-root">
         <div className="mobile-editor-tabs" role="tablist">
@@ -488,39 +484,23 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             </button>
           )}
           <div className="mobile-pane-switch-group">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobilePane === 'wysiwyg'}
-              className={`mobile-editor-tab-btn ${mobilePane === 'wysiwyg' ? 'is-active' : ''}`}
-              onClick={() => {
-                setMobilePane('wysiwyg');
-                onChangeEditorMode('wysiwyg');
-              }}
-            >
-              {t.editor.mobileWysiwygLabel}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobilePane === 'edit'}
-              className={`mobile-editor-tab-btn ${mobilePane === 'edit' ? 'is-active' : ''}`}
-              onClick={() => {
-                setMobilePane('edit');
-                onChangeEditorMode('split');
-              }}
-            >
-              {t.editor.mobileEditLabel}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobilePane === 'preview'}
-              className={`mobile-editor-tab-btn ${mobilePane === 'preview' ? 'is-active' : ''}`}
-              onClick={() => setMobilePane('preview')}
-            >
-              {t.editor.mobilePreviewLabel}
-            </button>
+            {mobilePaneButtons.map((pane) => (
+              <button
+                key={pane.id}
+                type="button"
+                role="tab"
+                aria-selected={mobilePane === pane.id}
+                className={`mobile-editor-tab-btn ${mobilePane === pane.id ? 'is-active' : ''}`}
+                onClick={() => {
+                  setMobilePane(pane.id);
+                  if (pane.mode) {
+                    onChangeEditorMode(pane.mode);
+                  }
+                }}
+              >
+                {pane.label}
+              </button>
+            ))}
           </div>
         </div>
         <div
@@ -528,112 +508,65 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
           data-editor-mode={editorMode}
           data-mobile-active={mobilePane}
         >
-        {(editorMode === 'wysiwyg' || mobilePane === 'wysiwyg') && (
-          <WysiwygEditor
-            ref={wysiwygRef}
-            value={value}
-            onChange={onChange}
-            onEditMermaid={onEditMermaid}
-            onOpenNewMermaid={onOpenNewMermaid}
-            onOpenMarkdownLink={onOpenMarkdownLink}
-          />
-        )}
-        <section className="editor-pane-left">
-          <div className="pane-header">
-            <span>{t.editor.editorPaneHeader}</span>
-          </div>
-          <textarea
-            ref={textareaRef}
-            className="markdown-textarea"
-            style={{ tabSize }}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={handleTextareaKeyDown}
-            placeholder={t.editor.editorPlaceholder}
-            spellCheck={false}
-          />
-        </section>
+          {(editorMode === 'wysiwyg' || mobilePane === 'wysiwyg') && (
+            <Suspense
+              fallback={
+                <section className="editor-pane-wysiwyg">
+                  <div className="pane-header">
+                    <span>{t.editor.wysiwygPaneHeader}</span>
+                  </div>
+                  <div className="wysiwyg-editor-scroll" />
+                </section>
+              }
+            >
+              <WysiwygEditor
+                ref={wysiwygRef}
+                value={value}
+                onChange={onChange}
+                onEditMermaid={onEditMermaid}
+                onOpenNewMermaid={onOpenNewMermaid}
+                onOpenMarkdownLink={onOpenMarkdownLink}
+              />
+            </Suspense>
+          )}
+          {shouldMountTextarea && (
+            <section className="editor-pane-left">
+              <div className="pane-header">
+                <span>{t.editor.editorPaneHeader}</span>
+              </div>
+              <textarea
+                ref={textareaRef}
+                className="markdown-textarea"
+                style={{ tabSize }}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                onKeyDown={handleTextareaKeyDown}
+                placeholder={t.editor.editorPlaceholder}
+                spellCheck={false}
+              />
+            </section>
+          )}
 
-        <section className="editor-pane-right">
-          <div className="pane-header">{t.editor.previewPaneHeader}</div>
-          <div className="markdown-preview-scroll">
-            <div ref={previewBodyRef} className="markdown-preview-body">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a({ node: _node, href, children, className, title, onClick, ...rest }) {
-                    const rawHref = typeof href === 'string' ? href : '';
-                    const isInAppDocLink = rawHref ? (isDocumentLink?.(rawHref) ?? false) : false;
-                    const isExternalHttp = !isInAppDocLink && /^https?:\/\//i.test(rawHref);
-                    const isHashAnchor = rawHref.startsWith('#');
-                    const combinedClassName = isInAppDocLink
-                      ? [className, 'markdown-doc-link'].filter(Boolean).join(' ')
-                      : className;
-
-                    return (
-                      <a
-                        {...rest}
-                        href={rawHref || undefined}
-                        className={combinedClassName}
-                        target={isExternalHttp ? '_blank' : undefined}
-                        rel={isExternalHttp ? 'noopener noreferrer' : undefined}
-                        title={isInAppDocLink ? t.editor.openLinkedDocTitle : title}
-                        onClick={(event) => {
-                          onClick?.(event);
-                          if (!rawHref) {
-                            event.preventDefault();
-                            return;
-                          }
-                          if (isHashAnchor) {
-                            return;
-                          }
-                          if (isInAppDocLink && onOpenMarkdownLink) {
-                            event.preventDefault();
-                            onOpenMarkdownLink(rawHref);
-                            return;
-                          }
-                          if (!isExternalHttp) {
-                            event.preventDefault();
-                            onOpenMarkdownLink?.(rawHref);
-                          }
-                        }}
-                      >
-                        {children}
-                      </a>
-                    );
-                  },
-                  pre({ children }) {
-                    if (isMermaidPreChild(children)) {
-                      return <div className="mermaid-pre-container">{children}</div>;
-                    }
-                    return <pre className="markdown-code-pre">{children}</pre>;
-                  },
-                  code({ node, className, children, ...rest }) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    if (match && match[1].toLowerCase() === 'mermaid') {
-                      const codeText = String(children).replace(/\n$/, '');
-                      const blockIndex = resolveBlockIndex(node?.position?.start.line, codeText);
-                      return (
-                        <MermaidPreviewBlock
-                          code={codeText}
-                          blockIndex={blockIndex}
-                          onEdit={onEditMermaid}
-                        />
-                      );
-                    }
-                    return (
-                      <code className={className} {...rest}>
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {value}
-              </ReactMarkdown>
-            </div>
-          </div>
-        </section>
+          {shouldMountPreview && (
+            <Suspense
+              fallback={
+                <section className="editor-pane-right">
+                  <div className="pane-header">{t.editor.previewPaneHeader}</div>
+                  <div className="markdown-preview-scroll" />
+                </section>
+              }
+            >
+              <MarkdownPreviewPane
+                value={previewMarkdownValue}
+                previewBodyRef={previewBodyRef}
+                resolveBlockIndex={resolveBlockIndex}
+                onEditMermaid={onEditMermaid}
+                onOpenMarkdownLink={onOpenMarkdownLink}
+                isDocumentLink={isDocumentLink}
+                onRenderPendingChange={handleMermaidPendingChange}
+              />
+            </Suspense>
+          )}
         </div>
       </div>
     );

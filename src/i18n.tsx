@@ -4,11 +4,10 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { enCatalog } from './locales/en';
-import { jaCatalog } from './locales/ja';
 import type { Language, TranslationCatalog } from './locales/types';
 import { parseEmbedConfig } from './utils/embedBridge';
 import { readLocalStorage, writeLocalStorage } from './utils/storage';
@@ -22,6 +21,47 @@ export {
 } from './locales/templates';
 
 export const LANG_STORAGE_KEY = 'mermaid-flow-editor:lang';
+
+const catalogCache: Partial<Record<Language, TranslationCatalog>> = {};
+const pendingCatalogLoads: Partial<Record<Language, Promise<TranslationCatalog>>> = {};
+
+export function preloadLocaleCatalog(lang: Language, catalog: TranslationCatalog): void {
+  catalogCache[lang] = catalog;
+}
+
+export function clearLocaleCatalogCache(): void {
+  delete catalogCache.ja;
+  delete catalogCache.en;
+  delete pendingCatalogLoads.ja;
+  delete pendingCatalogLoads.en;
+}
+
+export async function loadLocaleCatalog(lang: Language): Promise<TranslationCatalog> {
+  const cached = catalogCache[lang];
+  if (cached) {
+    return cached;
+  }
+  const existingPending = pendingCatalogLoads[lang];
+  if (existingPending) {
+    return existingPending;
+  }
+
+  const pending = (
+    lang === 'ja'
+      ? import('./locales/ja').then((mod) => mod.jaCatalog)
+      : import('./locales/en').then((mod) => mod.enCatalog)
+  )
+    .then((catalog) => {
+      catalogCache[lang] = catalog;
+      return catalog;
+    })
+    .finally(() => {
+      delete pendingCatalogLoads[lang];
+    });
+
+  pendingCatalogLoads[lang] = pending;
+  return pending;
+}
 
 export function detectInitialLanguage(): Language {
   if (typeof window !== 'undefined') {
@@ -43,11 +83,6 @@ export function detectInitialLanguage(): Language {
   return 'en';
 }
 
-const translations: Record<Language, TranslationCatalog> = {
-  ja: jaCatalog,
-  en: enCatalog,
-};
-
 export interface I18nContextValue {
   lang: Language;
   setLang: (nextLang: Language) => void;
@@ -55,10 +90,37 @@ export interface I18nContextValue {
   t: TranslationCatalog;
 }
 
+export interface I18nProviderProps {
+  children: ReactNode;
+  initialLang?: Language;
+  initialCatalog?: TranslationCatalog;
+}
+
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Language>(detectInitialLanguage);
+export function I18nProvider({
+  children,
+  initialLang,
+  initialCatalog,
+}: I18nProviderProps) {
+  const startLangRef = useRef<Language>(initialLang ?? detectInitialLanguage());
+  const startLang = startLangRef.current;
+
+  if (initialCatalog && !catalogCache[startLang]) {
+    catalogCache[startLang] = initialCatalog;
+  }
+
+  const [state, setState] = useState<{
+    lang: Language;
+    catalog: TranslationCatalog | null;
+  }>(() => ({
+    lang: startLang,
+    catalog: initialCatalog ?? catalogCache[startLang] ?? null,
+  }));
+
+  const targetLangRef = useRef<Language>(startLang);
+  const requestIdRef = useRef(0);
+
   const isEmbedMode = useMemo(() => {
     if (typeof window === 'undefined') {
       return false;
@@ -67,29 +129,70 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.documentElement.lang = lang;
-    if (!isEmbedMode) {
-      writeLocalStorage(LANG_STORAGE_KEY, lang);
+    if (state.catalog !== null) {
+      return;
     }
-  }, [isEmbedMode, lang]);
+    let cancelled = false;
+    const reqId = requestIdRef.current;
+    const langToLoad = targetLangRef.current;
+    void loadLocaleCatalog(langToLoad).then((loaded) => {
+      if (cancelled || requestIdRef.current !== reqId) {
+        return;
+      }
+      setState({ lang: langToLoad, catalog: loaded });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.catalog]);
+
+  useEffect(() => {
+    if (!state.catalog) {
+      return;
+    }
+    document.documentElement.lang = state.lang;
+    if (!isEmbedMode) {
+      writeLocalStorage(LANG_STORAGE_KEY, state.lang);
+    }
+  }, [isEmbedMode, state.catalog, state.lang]);
 
   const setLang = useCallback((nextLang: Language) => {
-    setLangState(nextLang);
+    targetLangRef.current = nextLang;
+    const reqId = ++requestIdRef.current;
+    const cached = catalogCache[nextLang];
+    if (cached) {
+      setState({ lang: nextLang, catalog: cached });
+      return;
+    }
+    void loadLocaleCatalog(nextLang).then((loaded) => {
+      if (requestIdRef.current !== reqId) {
+        return;
+      }
+      setState({ lang: nextLang, catalog: loaded });
+    });
   }, []);
 
   const toggleLang = useCallback(() => {
-    setLangState((prev) => (prev === 'ja' ? 'en' : 'ja'));
-  }, []);
+    const nextLang: Language = targetLangRef.current === 'ja' ? 'en' : 'ja';
+    setLang(nextLang);
+  }, [setLang]);
 
-  const value = useMemo<I18nContextValue>(
-    () => ({
-      lang,
-      setLang,
-      toggleLang,
-      t: translations[lang],
-    }),
-    [lang, setLang, toggleLang]
+  const value = useMemo<I18nContextValue | null>(
+    () =>
+      state.catalog
+        ? {
+            lang: state.lang,
+            setLang,
+            toggleLang,
+            t: state.catalog,
+          }
+        : null,
+    [state.catalog, state.lang, setLang, toggleLang]
   );
+
+  if (!value) {
+    return null;
+  }
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

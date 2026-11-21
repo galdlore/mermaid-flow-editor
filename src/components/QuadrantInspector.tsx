@@ -10,6 +10,7 @@ import {
   FORBIDDEN_QUADRANT_TEXT_CHARS_REGEX,
 } from '../utils/inputSafeguard';
 import GuardedInput from './GuardedInput';
+import { InspectorCommentsSection } from './InspectorCommon';
 
 interface QuadrantInspectorProps {
   data: QuadrantDiagramData;
@@ -320,7 +321,7 @@ export const QuadrantInspector: React.FC<QuadrantInspectorProps> = ({
 
                 <button
                   type="button"
-                  className="toolbar-btn danger quadrant-full-btn"
+                  className="btn-danger-outline btn-xs quadrant-full-btn"
                   onClick={handleDeleteSelectedPoint}
                 >
                   {qText.deletePointBtn}
@@ -460,7 +461,7 @@ export const QuadrantInspector: React.FC<QuadrantInspectorProps> = ({
           <div className="quadrant-section-body">
             <button
               type="button"
-              className="toolbar-btn primary quadrant-full-btn"
+              className="btn-primary btn-sm quadrant-full-btn"
               onClick={handleAddClassDef}
             >
               {qText.addClassBtn}
@@ -488,7 +489,7 @@ export const QuadrantInspector: React.FC<QuadrantInspectorProps> = ({
                     </div>
                     <button
                       type="button"
-                      className="toolbar-btn danger quadrant-class-del-btn"
+                      className="btn-danger-outline btn-xs quadrant-class-del-btn"
                       onClick={() => handleDeleteClassDef(index)}
                       title="Delete"
                     >
@@ -643,38 +644,20 @@ export const QuadrantInspector: React.FC<QuadrantInspectorProps> = ({
       </div>
 
       {/* 5. Comments (%%) */}
-      <div className="quadrant-section">
-        <button
-          type="button"
-          className="quadrant-section-header"
-          onClick={() => toggleSection('comments')}
-        >
-          <span>{qText.commentsSection}</span>
-          <span className="quadrant-section-chevron">{openSections.comments ? '▼' : '▶'}</span>
-        </button>
-
-        {openSections.comments && (
-          <div className="quadrant-section-body">
-            <div className="field-group">
-              <label className="field-label">{qText.commentsField}</label>
-              <textarea
-                rows={3}
-                className="field-input field-textarea"
-                placeholder={qText.commentsPlaceholder}
-                value={(data.comments ?? []).join('\n')}
-                onChange={(e) => {
-                  const rawLines = e.target.value.split('\n');
-                  const hasNonEmpty = rawLines.some((line) => line.trim().length > 0);
-                  onChange({
-                    ...data,
-                    comments: hasNonEmpty ? rawLines : undefined,
-                  });
-                }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      <InspectorCommentsSection
+        title={qText.commentsSection}
+        fieldLabel={qText.commentsField}
+        placeholder={qText.commentsPlaceholder}
+        comments={data.comments}
+        isOpen={openSections.comments}
+        onToggle={() => toggleSection('comments')}
+        onChangeComments={(nextComments) =>
+          onChange({
+            ...data,
+            comments: nextComments,
+          })
+        }
+      />
     </div>
   );
 };
