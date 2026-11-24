@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react';
-import type { Language, TranslationCatalog } from '../locales/types';
+import type {
+  InspectorLocaleGroup,
+  Language,
+  TranslationCatalog,
+} from '../locales/types';
 import type {
   ArchitectureDiagramData,
   BlockDiagramData,
@@ -138,6 +142,7 @@ export interface DiagramRegistryEntry {
   id: MermaidDiagramType;
   storeKey?: DiagramStoreKey;
   available: boolean;
+  localeGroups: ReadonlyArray<InspectorLocaleGroup>;
   getSubtitle: (t: TranslationCatalog) => string;
   loader: () => Promise<ErasedDiagramHandler>;
 }

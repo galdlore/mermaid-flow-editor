@@ -158,7 +158,7 @@ function buildExtension(): void {
     ja: {
       extName: { message: 'Mermaid Flow Editor' },
       extDescription: {
-        message: 'Markdown文書と15種類のMermaid図を完全GUIで作成・編集でき、HTMLやPDF出力にも対応したエディタ',
+        message: 'Markdown文書と31種類のMermaid図を完全GUIで作成・編集でき、HTMLやPDF出力にも対応したエディタ',
       },
       actionTitle: { message: 'Mermaid Flow Editor を開く' },
     },
@@ -166,7 +166,7 @@ function buildExtension(): void {
       extName: { message: 'Mermaid Flow Editor' },
       extDescription: {
         message:
-          'A visual WYSIWYG Markdown editor with GUI builders for 15 Mermaid diagram types and HTML/PDF export.',
+          'A visual WYSIWYG Markdown editor with GUI builders for 31 Mermaid diagram types and HTML/PDF export.',
       },
       actionTitle: { message: 'Open Mermaid Flow Editor' },
     },

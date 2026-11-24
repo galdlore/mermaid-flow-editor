@@ -59,6 +59,13 @@ describe('Toolbar', () => {
     fireEvent.click(fileMenuBtn);
     expect(screen.getByRole('menu')).toBeInTheDocument();
 
+    const newItem = screen.getByRole('menuitem', { name: /^新規/ });
+    expect(newItem).toHaveTextContent('Ctrl+N / Alt+N');
+    fireEvent.click(newItem);
+    expect(props.onNewFile).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+    fireEvent.click(fileMenuBtn);
     fireEvent.click(screen.getByRole('menuitem', { name: 'クラウドから開く' }));
     expect(props.onOpenFromCloud).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();

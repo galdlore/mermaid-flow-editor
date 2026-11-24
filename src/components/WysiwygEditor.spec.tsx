@@ -1,3 +1,4 @@
+import { createRef } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -29,7 +30,12 @@ import {
 } from '../utils/wysiwygBlockActions';
 import WysiwygEditor, {
   createExitEmptyContainerOnBackspacePlugin,
+  type WysiwygEditorHandle,
 } from './WysiwygEditor';
+import {
+  extractPasteableUrl,
+  validateLinkHrefInput,
+} from './wysiwyg/linkUtils';
 
 if (typeof Range !== 'undefined') {
   if (typeof Range.prototype.getBoundingClientRect !== 'function') {
@@ -730,6 +736,174 @@ describe('WysiwygEditor block handle and menu UI', () => {
       const paragraphs = container.querySelectorAll('.ProseMirror > p');
       expect(paragraphs.length).toBe(2);
       expect(onChange).toHaveBeenCalledWith('alpha\n\nalpha\n');
+    });
+  });
+});
+
+describe('WysiwygEditor inline link popover and shortcuts', () => {
+  it('validates allowed and unsafe link href values', () => {
+    expect(validateLinkHrefInput('  https://example.com/docs  ')).toEqual({
+      ok: true,
+      href: 'https://example.com/docs',
+    });
+    expect(validateLinkHrefInput('./guide.md#sec')).toEqual({
+      ok: true,
+      href: './guide.md#sec',
+    });
+    expect(validateLinkHrefInput('   ')).toEqual({
+      ok: false,
+      reason: 'empty',
+    });
+    expect(validateLinkHrefInput('javascript:alert(1)')).toEqual({
+      ok: false,
+      reason: 'unsafe',
+    });
+    expect(validateLinkHrefInput('//evil.example/path')).toEqual({
+      ok: false,
+      reason: 'unsafe',
+    });
+    expect(extractPasteableUrl('https://openai.com')).toBe('https://openai.com');
+    expect(extractPasteableUrl('not a url')).toBeNull();
+    expect(extractPasteableUrl('javascript:alert(1)')).toBeNull();
+  });
+
+  it('opens inline link popover from applyLink, validates URL, and inserts link without placeholder URL', async () => {
+    const onChange = vi.fn();
+    const onEditMermaid = vi.fn();
+    const editorHandleRef = createRef<WysiwygEditorHandle>();
+
+    const { container } = render(
+      <I18nProvider>
+        <WysiwygEditor
+          ref={editorHandleRef}
+          value="hello world"
+          onChange={onChange}
+          onEditMermaid={onEditMermaid}
+        />
+      </I18nProvider>
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('.ProseMirror')).not.toBeNull();
+    });
+
+    editorHandleRef.current?.applyLink('リンク名');
+
+    const dialog = await screen.findByRole('dialog', {
+      name: jaCatalog.editor.linkPopoverAria,
+    });
+    expect(dialog).toBeInTheDocument();
+
+    const textInput = screen.getByLabelText(jaCatalog.editor.linkTextLabel);
+    const urlInput = screen.getByLabelText(jaCatalog.editor.linkUrlLabel);
+
+    fireEvent.change(urlInput, { target: { value: 'javascript:alert(1)' } });
+    fireEvent.click(screen.getByRole('button', { name: jaCatalog.editor.linkApplyBtn }));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      jaCatalog.editor.linkUrlUnsafeError
+    );
+
+    fireEvent.change(textInput, { target: { value: 'Docs' } });
+    fireEvent.change(urlInput, { target: { value: 'https://example.org/docs' } });
+    fireEvent.click(screen.getByRole('button', { name: jaCatalog.editor.linkApplyBtn }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: jaCatalog.editor.linkPopoverAria })
+      ).not.toBeInTheDocument();
+      const anchor = container.querySelector('.ProseMirror a') as HTMLAnchorElement | null;
+      expect(anchor).not.toBeNull();
+      expect(anchor?.textContent).toBe('Docs');
+      expect(anchor?.getAttribute('href')).toBe('https://example.org/docs');
+    });
+  });
+
+  it('opens preview bar on link click, edits URL/text, unlinks cleanly, and preserves Ctrl+Click opening', async () => {
+    const onChange = vi.fn();
+    const onEditMermaid = vi.fn();
+    const onOpenMarkdownLink = vi.fn();
+
+    const { container } = render(
+      <I18nProvider>
+        <WysiwygEditor
+          value="[Original](https://example.com)"
+          onChange={onChange}
+          onEditMermaid={onEditMermaid}
+          onOpenMarkdownLink={onOpenMarkdownLink}
+        />
+      </I18nProvider>
+    );
+
+    const anchor = await waitFor(() => {
+      const a = container.querySelector('.ProseMirror a') as HTMLAnchorElement | null;
+      expect(a).not.toBeNull();
+      return a!;
+    });
+
+    fireEvent.click(anchor);
+    await screen.findByRole('dialog', { name: jaCatalog.editor.linkPopoverAria });
+    expect(onOpenMarkdownLink).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: jaCatalog.editor.linkEditBtn }));
+    const textInput = await screen.findByLabelText(jaCatalog.editor.linkTextLabel);
+    const urlInput = screen.getByLabelText(jaCatalog.editor.linkUrlLabel);
+    expect(textInput).toHaveValue('Original');
+    expect(urlInput).toHaveValue('https://example.com');
+
+    fireEvent.change(textInput, { target: { value: 'Updated' } });
+    fireEvent.change(urlInput, { target: { value: './notes/guide.md' } });
+    fireEvent.click(screen.getByRole('button', { name: jaCatalog.editor.linkApplyBtn }));
+
+    await waitFor(() => {
+      const updatedAnchor = container.querySelector('.ProseMirror a');
+      expect(updatedAnchor?.textContent).toBe('Updated');
+      expect(updatedAnchor?.getAttribute('href')).toBe('./notes/guide.md');
+    });
+
+    const updatedAnchor = container.querySelector('.ProseMirror a') as HTMLAnchorElement;
+    fireEvent.click(updatedAnchor, { ctrlKey: true });
+    expect(onOpenMarkdownLink).toHaveBeenCalledWith('./notes/guide.md');
+
+    fireEvent.click(updatedAnchor);
+    await screen.findByRole('dialog', { name: jaCatalog.editor.linkPopoverAria });
+    fireEvent.click(screen.getByRole('button', { name: jaCatalog.editor.linkRemoveBtn }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.ProseMirror a')).toBeNull();
+      expect(container.querySelector('.ProseMirror')?.textContent).toContain('Updated');
+    });
+  });
+
+  it('opens link editor on Ctrl+K and ignores unsafe URL paste on selected text', async () => {
+    const onChange = vi.fn();
+    const onEditMermaid = vi.fn();
+
+    const { container } = render(
+      <I18nProvider>
+        <WysiwygEditor
+          value="plain target"
+          onChange={onChange}
+          onEditMermaid={onEditMermaid}
+        />
+      </I18nProvider>
+    );
+
+    const pm = await waitFor(() => {
+      const el = container.querySelector('.ProseMirror') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    fireEvent.keyDown(pm, { key: 'k', ctrlKey: true });
+    expect(
+      await screen.findByRole('dialog', { name: jaCatalog.editor.linkPopoverAria })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: jaCatalog.editor.linkCancelBtn }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: jaCatalog.editor.linkPopoverAria })
+      ).not.toBeInTheDocument();
     });
   });
 });

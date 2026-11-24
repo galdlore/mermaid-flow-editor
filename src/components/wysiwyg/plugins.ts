@@ -4,6 +4,7 @@ import type { Ctx } from '@milkdown/kit/ctx';
 import { BlockProvider } from '@milkdown/kit/plugin/block';
 import {
   blockquoteSchema,
+  linkSchema,
   listItemSchema,
   paragraphSchema,
 } from '@milkdown/kit/preset/commonmark';
@@ -25,6 +26,7 @@ import {
   type BlockInsertItemId,
   type ResolvedBlockInsertItem,
 } from '../../utils/wysiwygBlockActions';
+import { applyLinkRangeUpdate, extractPasteableUrl } from './linkUtils';
 import type { WysiwygEditorStrings, WysiwygMenuState } from './types';
 
 const PLUS_SVG =
@@ -399,4 +401,65 @@ export function createBlockHandleViewFactory(ctx: Ctx, deps: BlockHandleViewDeps
       }
     },
   };
+}
+
+export interface LinkInteractionDeps {
+  onOpenLinkEditor: () => void;
+  onAfterLinkMutated: () => void;
+}
+
+/**
+ * Ctrl+K / Cmd+K でリンク編集ポップオーバーを開き、選択テキストへのURL貼り付けを自動でリンク化する。
+ */
+export function createLinkInteractionPlugin(deps: LinkInteractionDeps) {
+  return $prose((ctx) => {
+    return new Plugin({
+      key: new PluginKey('WYSIWYG_LINK_INTERACTION'),
+      props: {
+        handleKeyDown: (_view, event) => {
+          if (
+            !event.isComposing &&
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            !event.shiftKey &&
+            event.key.toLowerCase() === 'k'
+          ) {
+            event.preventDefault();
+            deps.onOpenLinkEditor();
+            return true;
+          }
+          return false;
+        },
+        handlePaste: (view, event) => {
+          const { selection } = view.state;
+          if (selection.empty) {
+            return false;
+          }
+          const rawText = event.clipboardData?.getData('text/plain') ?? '';
+          const url = extractPasteableUrl(rawText);
+          if (!url) {
+            return false;
+          }
+          const selectedLabel = view.state.doc.textBetween(
+            selection.from,
+            selection.to,
+            ''
+          );
+          if (!selectedLabel.trim()) {
+            return false;
+          }
+          event.preventDefault();
+          applyLinkRangeUpdate(
+            view,
+            linkSchema.type(ctx),
+            { from: selection.from, to: selection.to },
+            selectedLabel,
+            url
+          );
+          deps.onAfterLinkMutated();
+          return true;
+        },
+      },
+    });
+  });
 }

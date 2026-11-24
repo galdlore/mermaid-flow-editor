@@ -197,6 +197,7 @@ export default function App() {
     onCloseMermaidModal: handleCloseMermaidModal,
     onCloseSettingsModal: handleCloseSettingsModal,
     onCloseCloudBrowser: handleCloseCloudBrowser,
+    onNewFile: handleNewTab,
     onOpenFile: handleOpenFile,
     onPrint: handlePrint,
     onSaveFile: handleSaveFile,

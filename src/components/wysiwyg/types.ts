@@ -54,3 +54,14 @@ export interface WysiwygEditorStrings {
 }
 
 export type WysiwygBlockAction = 'moveUp' | 'moveDown' | 'duplicate' | 'delete';
+
+export interface WysiwygLinkPopoverState {
+  mode: 'preview' | 'edit';
+  isNew: boolean;
+  from: number;
+  to: number;
+  label: string;
+  href: string;
+  anchorTop: number;
+  anchorLeft: number;
+}

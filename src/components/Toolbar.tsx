@@ -200,6 +200,7 @@ const Toolbar = memo(function Toolbar({
             >
               <FilePlus size={15} />
               <span className="file-menu-item-label">{t.toolbar.newLabel}</span>
+              <span className="file-menu-shortcut">Ctrl+N / Alt+N</span>
             </button>
             <button
               type="button"

@@ -8,7 +8,6 @@ import {
   listItemSchema,
   paragraphSchema,
   toggleEmphasisCommand,
-  toggleLinkCommand,
   toggleStrongCommand,
   wrapInBlockquoteCommand,
   wrapInBulletListCommand,
@@ -23,12 +22,14 @@ export interface CreateWysiwygHandleDeps {
   editorRef: MutableRefObject<Editor | null>;
   readyRef: MutableRefObject<boolean>;
   runWithFocus: (fn: (editor: Editor) => void) => void;
+  onOpenLinkEditor: () => void;
 }
 
 export function createWysiwygImperativeHandle({
   editorRef,
   readyRef,
   runWithFocus,
+  onOpenLinkEditor,
 }: CreateWysiwygHandleDeps): WysiwygEditorHandle {
   return {
     focus() {
@@ -75,19 +76,8 @@ export function createWysiwygImperativeHandle({
       });
     },
 
-    applyLink(placeholder: string) {
-      runWithFocus((editor) => {
-        editor.action((ctx) => {
-          const view = ctx.get(editorViewCtx);
-          if (view.state.selection.empty) {
-            const mark = linkSchema.type(ctx).create({ href: 'https://example.com' });
-            const textNode = view.state.schema.text(placeholder, [mark]);
-            view.dispatch(view.state.tr.replaceSelectionWith(textNode, false));
-            return;
-          }
-          callCommand(toggleLinkCommand.key, { href: 'https://example.com' })(ctx);
-        });
-      });
+    applyLink(_placeholder: string) {
+      onOpenLinkEditor();
     },
 
     getSelectedText() {
@@ -115,9 +105,14 @@ export function createWysiwygImperativeHandle({
       runWithFocus((editor) => {
         editor.action((ctx) => {
           const view = ctx.get(editorViewCtx);
-          const mark = linkSchema.type(ctx).create({ href: cleanHref });
+          const linkType = linkSchema.type(ctx);
+          const mark = linkType.create({ href: cleanHref });
           const textNode = view.state.schema.text(textLabel, [mark]);
-          view.dispatch(view.state.tr.replaceSelectionWith(textNode, false).scrollIntoView());
+          const tr = view.state.tr
+            .replaceSelectionWith(textNode, false)
+            .removeStoredMark(linkType)
+            .scrollIntoView();
+          view.dispatch(tr);
         });
       });
     },
@@ -243,21 +238,26 @@ export function handleWysiwygContainerClick(
   editor: Editor | null,
   ready: boolean,
   onOpenMarkdownLink: ((href: string) => void) | undefined,
-  flushCurrentMarkdown: () => void
+  flushCurrentMarkdown: () => void,
+  onClickLink?: (anchorEl: HTMLAnchorElement, href: string) => void
 ): void {
   const target = event.target as HTMLElement | null;
   const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
-  if (anchor && (event.ctrlKey || event.metaKey)) {
+  if (anchor) {
     const rawHref = anchor.getAttribute('href') ?? '';
-    if (rawHref.trim()) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (onOpenMarkdownLink) {
-        onOpenMarkdownLink(rawHref);
-      } else if (/^https?:\/\//i.test(rawHref.trim())) {
-        window.open(rawHref.trim(), '_blank', 'noopener,noreferrer');
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      if (rawHref.trim()) {
+        event.stopPropagation();
+        if (onOpenMarkdownLink) {
+          onOpenMarkdownLink(rawHref);
+        } else if (/^https?:\/\//i.test(rawHref.trim())) {
+          window.open(rawHref.trim(), '_blank', 'noopener,noreferrer');
+        }
       }
+      return;
     }
+    onClickLink?.(anchor, rawHref);
     return;
   }
 

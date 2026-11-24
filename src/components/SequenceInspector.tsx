@@ -1,31 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n';
-import GuardedInput from './GuardedInput';
-import { InspectorCollapsibleSection } from './InspectorCollapsibleSection';
 import {
   InspectorBulkControls,
-  InspectorColorPalette,
   InspectorCommentsSection,
 } from './InspectorCommon';
 import {
-  FORBIDDEN_SEQUENCE_ALIAS_CHARS_REGEX,
-  FORBIDDEN_SEQUENCE_ID_CHARS_REGEX,
-  FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX,
-} from '../utils/inputSafeguard';
+  SequenceParticipantsSection,
+  SequenceSettingsSection,
+} from './sequence/SequenceParticipantsSection';
+import SequenceStepSection from './sequence/SequenceStepSection';
 import type {
-  SequenceArrowType,
   SequenceBlockType,
   SequenceBoxData,
   SequenceDiagramData,
-  SequenceNotePlacement,
   SequenceParticipantData,
-  SequenceParticipantKind,
   SequenceStepData,
 } from '../types/editor';
 import {
-  SEQUENCE_ARROW_OPTIONS,
-  SEQUENCE_BLOCK_TYPES,
   analyzeSequenceActivation,
   appendStepToBranch,
   createUniqueSequenceBranchId,
@@ -46,12 +37,6 @@ export interface SequenceInspectorProps {
 }
 
 type SequenceSectionKey = 'step' | 'participants' | 'settings' | 'comments';
-
-const NOTE_PLACEMENTS: ReadonlyArray<SequenceNotePlacement> = [
-  'right_of',
-  'left_of',
-  'over',
-];
 
 const RESERVED_SEQUENCE_IDS = new Set([
   'end',
@@ -125,7 +110,6 @@ export default function SequenceInspector({
 }: SequenceInspectorProps) {
   const { t } = useI18n();
   const s = t.inspector.sequence;
-  const safeguard = t.inspector.safeguard;
 
   const participants = sequenceData.participants;
   const boxes = sequenceData.boxes ?? [];
@@ -370,584 +354,42 @@ export default function SequenceInspector({
     <div className="inspector-panel">
       <InspectorBulkControls allExpanded={allExpanded} onSetAll={setAllSections} />
 
-      <InspectorCollapsibleSection
-        title={s.stepSection}
-        badgeText={selectedStep ? s.stepKindLabels[selectedStep.kind] : undefined}
+      <SequenceStepSection
+        selectedStep={selectedStep}
+        participants={participants}
+        messageSnapshot={messageSnapshot}
         isOpen={openSections.step}
         onToggle={() => toggleSection('step')}
-      >
-        {!selectedStep ? (
-          <p className="inspector-hint">{s.selectStepHint}</p>
-        ) : selectedStep.kind === 'message' ? (
-          <>
-            <div className="field-row-compact">
-              <label className="inspector-field">
-                <span>{s.fromField}</span>
-                <select
-                  value={selectedStep.from}
-                  onChange={(e) =>
-                    updateSelectedStep((step) =>
-                      step.kind === 'message' ? { ...step, from: e.target.value } : step
-                    )
-                  }
-                >
-                  {participants.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.alias ? `${p.alias} (${p.id})` : p.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
+        onUpdateSelectedStep={updateSelectedStep}
+        onDeleteSelectedStep={handleDeleteSelectedStep}
+        onChangeBlockType={handleChangeBlockType}
+        onAddBranch={handleAddBranch}
+        onAppendMessageToBranch={handleAppendMessageToBranch}
+      />
 
-              <label className="inspector-field">
-                <span>{s.toField}</span>
-                <select
-                  value={selectedStep.to}
-                  onChange={(e) =>
-                    updateSelectedStep((step) =>
-                      step.kind === 'message' ? { ...step, to: e.target.value } : step
-                    )
-                  }
-                >
-                  {participants.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.alias ? `${p.alias} (${p.id})` : p.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <button
-              type="button"
-              className="btn-secondary btn-xs seq-swap-btn"
-              onClick={() =>
-                updateSelectedStep((step) =>
-                  step.kind === 'message'
-                    ? { ...step, from: step.to, to: step.from }
-                    : step
-                )
-              }
-            >
-              <ArrowLeftRight size={12} />
-              <span>{s.swapPartiesBtn}</span>
-            </button>
-
-            <label className="inspector-field">
-              <span>{s.arrowTypeField}</span>
-              <select
-                value={selectedStep.arrowType}
-                onChange={(e) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'message'
-                      ? { ...step, arrowType: e.target.value as SequenceArrowType }
-                      : step
-                  )
-                }
-              >
-                {SEQUENCE_ARROW_OPTIONS.map((arrow) => (
-                  <option key={arrow} value={arrow}>
-                    {s.arrowTypes[arrow]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="inspector-field">
-              <span>{s.messageTextField}</span>
-              <GuardedInput
-                value={selectedStep.text}
-                placeholder={s.messageTextPlaceholder}
-                forbiddenRegex={FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX}
-                formatError={safeguard.sequenceTextErrorChars}
-                onChangeValue={(nextVal) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'message' ? { ...step, text: nextVal } : step
-                  )
-                }
-              />
-            </label>
-
-            <label className="checkbox-field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(selectedStep.activateTarget)}
-                onChange={(e) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'message'
-                      ? {
-                          ...step,
-                          activateTarget: e.target.checked ? true : undefined,
-                        }
-                      : step
-                  )
-                }
-              />
-              <span>{s.activateTargetField}</span>
-            </label>
-
-            <label className="checkbox-field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(selectedStep.deactivateSource)}
-                onChange={(e) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'message'
-                      ? {
-                          ...step,
-                          deactivateSource: e.target.checked ? true : undefined,
-                        }
-                      : step
-                  )
-                }
-              />
-              <span>{s.deactivateSourceField}</span>
-            </label>
-
-            {selectedStep.deactivateSource &&
-              messageSnapshot &&
-              !messageSnapshot.canDeactivateSource && (
-                <p className="inspector-hint seq-warn-hint">
-                  {s.deactivateUnavailableHint}
-                </p>
-              )}
-
-            <button
-              type="button"
-              className="btn-danger-outline"
-              onClick={handleDeleteSelectedStep}
-            >
-              <Trash2 size={14} />
-              <span>{s.deleteStepBtn}</span>
-            </button>
-          </>
-        ) : selectedStep.kind === 'note' ? (
-          <>
-            <label className="inspector-field">
-              <span>{s.placementField}</span>
-              <select
-                value={selectedStep.placement}
-                onChange={(e) => {
-                  const placement = e.target.value as SequenceNotePlacement;
-                  updateSelectedStep((step) =>
-                    step.kind === 'note'
-                      ? {
-                          ...step,
-                          placement,
-                          participantId2:
-                            placement === 'over' ? step.participantId2 : undefined,
-                        }
-                      : step
-                  );
-                }}
-              >
-                {NOTE_PLACEMENTS.map((pl) => (
-                  <option key={pl} value={pl}>
-                    {s.placements[pl]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="inspector-field">
-              <span>{s.noteTargetField}</span>
-              <select
-                value={selectedStep.participantId}
-                onChange={(e) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'note'
-                      ? { ...step, participantId: e.target.value }
-                      : step
-                  )
-                }
-              >
-                {participants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.alias ? `${p.alias} (${p.id})` : p.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedStep.placement === 'over' && (
-              <label className="inspector-field">
-                <span>{s.noteTarget2Field}</span>
-                <select
-                  value={selectedStep.participantId2 ?? ''}
-                  onChange={(e) =>
-                    updateSelectedStep((step) =>
-                      step.kind === 'note'
-                        ? {
-                            ...step,
-                            participantId2: e.target.value || undefined,
-                          }
-                        : step
-                    )
-                  }
-                >
-                  <option value="">{s.noteNoSecondOption}</option>
-                  {participants
-                    .filter((p) => p.id !== selectedStep.participantId)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.alias ? `${p.alias} (${p.id})` : p.id}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
-
-            <label className="inspector-field">
-              <span>{s.noteTextField}</span>
-              <GuardedInput
-                value={selectedStep.text}
-                placeholder={s.noteTextPlaceholder}
-                forbiddenRegex={FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX}
-                formatError={safeguard.sequenceTextErrorChars}
-                onChangeValue={(nextVal) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'note' ? { ...step, text: nextVal } : step
-                  )
-                }
-              />
-            </label>
-
-            <button
-              type="button"
-              className="btn-danger-outline"
-              onClick={handleDeleteSelectedStep}
-            >
-              <Trash2 size={14} />
-              <span>{s.deleteStepBtn}</span>
-            </button>
-          </>
-        ) : (
-          <>
-            <label className="inspector-field">
-              <span>{s.blockTypeField}</span>
-              <select
-                value={selectedStep.blockType}
-                onChange={(e) =>
-                  handleChangeBlockType(e.target.value as SequenceBlockType)
-                }
-              >
-                {SEQUENCE_BLOCK_TYPES.map((bt) => (
-                  <option key={bt} value={bt}>
-                    {s.blockTypes[bt]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedStep.blockType === 'rect' ? (
-              <InspectorColorPalette
-                label={s.blockColorField}
-                value={selectedStep.color ?? '#eff6ff'}
-                allowClear={false}
-                onChange={(nextColor) =>
-                  updateSelectedStep((step) =>
-                    step.kind === 'block' ? { ...step, color: nextColor } : step
-                  )
-                }
-              />
-            ) : (
-              <label className="inspector-field">
-                <span>{s.blockLabelField}</span>
-                <GuardedInput
-                  value={selectedStep.label}
-                  placeholder={s.blockLabelPlaceholder}
-                  forbiddenRegex={FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX}
-                  formatError={safeguard.sequenceTextErrorChars}
-                  onChangeValue={(nextVal) =>
-                    updateSelectedStep((step) =>
-                      step.kind === 'block' ? { ...step, label: nextVal } : step
-                    )
-                  }
-                />
-              </label>
-            )}
-
-            {isMultiBranchBlockType(selectedStep.blockType) && (
-              <div className="seq-branches-editor">
-                <div className="inspector-section-subhead">
-                  <span>{s.branchesHeading}</span>
-                  <button
-                    type="button"
-                    className="btn-secondary btn-xs"
-                    onClick={handleAddBranch}
-                  >
-                    <Plus size={12} />
-                    <span>{s.addBranchBtn}</span>
-                  </button>
-                </div>
-                {selectedStep.branches.map((branch, idx) => (
-                  <div key={branch.id} className="seq-branch-card">
-                    {idx === 0 ? (
-                      <div className="seq-branch-card-top">
-                        <span className="inspector-hint">{s.firstBranchPrimaryHint}</span>
-                        <button
-                          type="button"
-                          className="btn-secondary btn-xs"
-                          onClick={() => handleAppendMessageToBranch(branch.id)}
-                        >
-                          <Plus size={11} />
-                          <span>{s.addMessageHereBtn}</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="seq-branch-card-row">
-                          <GuardedInput
-                            value={branch.label ?? ''}
-                            placeholder={s.branchLabelPlaceholder}
-                            ariaLabel={s.branchLabelField}
-                            forbiddenRegex={FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX}
-                            formatError={safeguard.sequenceTextErrorChars}
-                            onChangeValue={(nextVal) =>
-                              updateSelectedStep((step) =>
-                                step.kind === 'block'
-                                  ? {
-                                      ...step,
-                                      branches: step.branches.map((b) =>
-                                        b.id === branch.id ? { ...b, label: nextVal } : b
-                                      ),
-                                    }
-                                  : step
-                              )
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="btn-icon-danger"
-                            title={s.deleteBranchTitle}
-                            onClick={() =>
-                              updateSelectedStep((step) =>
-                                step.kind === 'block'
-                                  ? {
-                                      ...step,
-                                      branches: step.branches.filter(
-                                        (b) => b.id !== branch.id
-                                      ),
-                                    }
-                                  : step
-                              )
-                            }
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn-secondary btn-xs"
-                          onClick={() => handleAppendMessageToBranch(branch.id)}
-                        >
-                          <Plus size={11} />
-                          <span>{s.addMessageHereBtn}</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              className="btn-danger-outline"
-              onClick={handleDeleteSelectedStep}
-            >
-              <Trash2 size={14} />
-              <span>{s.deleteStepBtn}</span>
-            </button>
-          </>
-        )}
-      </InspectorCollapsibleSection>
-
-      <InspectorCollapsibleSection
-        title={s.participantsSection}
-        badgeText={participants.length}
+      <SequenceParticipantsSection
+        participants={participants}
+        selectedParticipant={selectedParticipant}
+        participantIdDraft={participantIdDraft}
+        boxes={boxes}
         isOpen={openSections.participants}
         onToggle={() => toggleSection('participants')}
-      >
-        {participants.length === 0 ? (
-          <p className="inspector-hint">{s.emptyParticipants}</p>
-        ) : (
-          selectedParticipant && (
-            <>
-              <label className="inspector-field">
-                <span>{s.targetParticipantField}</span>
-                <select
-                  value={selectedParticipant.id}
-                  onChange={(e) => onSelectParticipant(e.target.value)}
-                >
-                  {participants.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.alias ? `${p.alias} (${p.id})` : p.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
+        onSelectParticipant={onSelectParticipant}
+        onChangeParticipantIdDraft={setParticipantIdDraft}
+        onCommitParticipantId={handleCommitParticipantId}
+        onUpdateSelectedParticipant={updateSelectedParticipant}
+        onDeleteParticipant={handleDeleteParticipant}
+        onAddBox={handleAddBox}
+        onUpdateBox={updateBox}
+        onDeleteBox={handleDeleteBox}
+      />
 
-              <div className="field-row-compact">
-                <label className="inspector-field">
-                  <span>{s.participantKindField}</span>
-                  <select
-                    value={selectedParticipant.kind}
-                    onChange={(e) =>
-                      updateSelectedParticipant({
-                        kind: e.target.value as SequenceParticipantKind,
-                      })
-                    }
-                  >
-                    <option value="participant">{s.participantKinds.participant}</option>
-                    <option value="actor">{s.participantKinds.actor}</option>
-                  </select>
-                </label>
-
-                <label className="inspector-field">
-                  <span>{s.participantIdField}</span>
-                  <GuardedInput
-                    value={participantIdDraft}
-                    forbiddenRegex={FORBIDDEN_SEQUENCE_ID_CHARS_REGEX}
-                    formatError={safeguard.sequenceIdErrorChars}
-                    onChangeValue={(nextVal) => {
-                      setParticipantIdDraft(nextVal);
-                      handleCommitParticipantId(nextVal);
-                    }}
-                  />
-                </label>
-              </div>
-
-              <label className="inspector-field">
-                <span>{s.participantAliasField}</span>
-                <GuardedInput
-                  value={selectedParticipant.alias ?? ''}
-                  placeholder={s.participantAliasPlaceholder}
-                  forbiddenRegex={FORBIDDEN_SEQUENCE_ALIAS_CHARS_REGEX}
-                  formatError={safeguard.sequenceAliasErrorChars}
-                  onChangeValue={(nextVal) =>
-                    updateSelectedParticipant({
-                      alias: nextVal || undefined,
-                    })
-                  }
-                />
-              </label>
-
-              <label className="inspector-field">
-                <span>{s.participantBoxField}</span>
-                <select
-                  value={selectedParticipant.boxId ?? ''}
-                  onChange={(e) =>
-                    updateSelectedParticipant({
-                      boxId: e.target.value || undefined,
-                    })
-                  }
-                >
-                  <option value="">{s.noBoxOption}</option>
-                  {boxes.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="button"
-                className="btn-danger-outline"
-                onClick={handleDeleteParticipant}
-              >
-                <Trash2 size={14} />
-                <span>{s.deleteParticipantBtn}</span>
-              </button>
-            </>
-          )
-        )}
-
-        <div className="seq-boxes-subsection">
-          <div className="inspector-section-subhead">
-            <span>{s.boxesHeading}</span>
-            <button
-              type="button"
-              className="btn-secondary btn-xs"
-              onClick={handleAddBox}
-            >
-              <Plus size={12} />
-              <span>{s.addBoxBtn}</span>
-            </button>
-          </div>
-          {boxes.length === 0 ? (
-            <p className="inspector-hint">{s.noBoxesHint}</p>
-          ) : (
-            <div className="seq-box-list">
-              {boxes.map((box) => (
-                <div key={box.id} className="seq-box-item">
-                  <div className="seq-branch-card-row">
-                    <GuardedInput
-                      value={box.title}
-                      ariaLabel={s.boxTitleField}
-                      forbiddenRegex={FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX}
-                      formatError={safeguard.sequenceTextErrorChars}
-                      onChangeValue={(nextVal) =>
-                        updateBox(box.id, { title: nextVal })
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="btn-icon-danger"
-                      title={s.deleteBoxTitle}
-                      onClick={() => handleDeleteBox(box.id)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                  <InspectorColorPalette
-                    value={box.color}
-                    clearTitle={s.noColorOption}
-                    onChange={(color) => updateBox(box.id, { color })}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </InspectorCollapsibleSection>
-
-      <InspectorCollapsibleSection
-        title={s.settingsSection}
+      <SequenceSettingsSection
+        sequenceData={sequenceData}
         isOpen={openSections.settings}
         onToggle={() => toggleSection('settings')}
-      >
-        <label className="inspector-field">
-          <span>{s.titleField}</span>
-          <GuardedInput
-            value={sequenceData.title ?? ''}
-            placeholder={s.titlePlaceholder}
-            forbiddenRegex={FORBIDDEN_SEQUENCE_TEXT_CHARS_REGEX}
-            formatError={safeguard.sequenceTextErrorChars}
-            onChangeValue={(nextVal) =>
-              onChange({
-                ...sequenceData,
-                title: nextVal || undefined,
-              })
-            }
-          />
-        </label>
-
-        <label className="checkbox-field-label">
-          <input
-            type="checkbox"
-            checked={Boolean(sequenceData.autonumber)}
-            onChange={(e) =>
-              onChange({
-                ...sequenceData,
-                autonumber: e.target.checked ? true : undefined,
-              })
-            }
-          />
-          <span>{s.autonumberField}</span>
-        </label>
-      </InspectorCollapsibleSection>
+        onChange={onChange}
+      />
 
       <InspectorCommentsSection
         title={s.commentsSection}

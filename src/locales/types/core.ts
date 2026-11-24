@@ -150,6 +150,18 @@ export interface CoreTranslationCatalog {
     tabSpacesOption: (count: number) => string;
     openLinkedDocTitle: string;
     wysiwygLinkHint: string;
+    linkPopoverAria: string;
+    linkTextLabel: string;
+    linkTextPlaceholder: string;
+    linkUrlLabel: string;
+    linkUrlPlaceholder: string;
+    linkApplyBtn: string;
+    linkCancelBtn: string;
+    linkEditBtn: string;
+    linkOpenBtn: string;
+    linkRemoveBtn: string;
+    linkUrlEmptyError: string;
+    linkUrlUnsafeError: string;
     blockAddTitle: string;
     blockDragTitle: string;
     blockMenuSearchPlaceholder: string;

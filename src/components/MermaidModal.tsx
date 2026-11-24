@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import '../styles/diagrams/common.css';
 import { Check, X } from 'lucide-react';
-import { useI18n } from '../i18n';
+import { useI18n, type TranslationCatalog } from '../i18n';
 import type { MermaidDiagramType } from '../types/editor';
 import { detectMermaidDiagramType } from '../utils/diagramDetect';
 import { renderMermaidSvg } from '../utils/mermaidRender';
@@ -33,7 +33,7 @@ export default function MermaidModal({
   onApply,
   onClose,
 }: MermaidModalProps) {
-  const { lang, t } = useI18n();
+  const { lang, t, ensureInspectorLocaleGroups, hasInspectorLocaleGroups } = useI18n();
   const reactId = useId();
   const [diagramType, setDiagramType] = useState<EditableDiagramType>('flowchart');
   const [diagramCache, setDiagramCache] = useState<DiagramStateCache>({});
@@ -51,6 +51,8 @@ export default function MermaidModal({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const diagramCacheRef = useRef<DiagramStateCache>(diagramCache);
   diagramCacheRef.current = diagramCache;
+  const hasInspectorLocaleGroupsRef = useRef(hasInspectorLocaleGroups);
+  hasInspectorLocaleGroupsRef.current = hasInspectorLocaleGroups;
   const loadRequestIdRef = useRef(0);
   const prevRenderContextRef = useRef<{
     isOpen: boolean;
@@ -69,6 +71,7 @@ export default function MermaidModal({
     const nextType: EditableDiagramType = isEditableDiagramType(detectedType)
       ? detectedType
       : 'flowchart';
+    const nextEntry = getDiagramRegistryEntry(nextType);
 
     const requestId = ++loadRequestIdRef.current;
     let cancelled = false;
@@ -93,7 +96,8 @@ export default function MermaidModal({
     };
 
     const cachedHandler = getCachedDiagramHandler(nextType);
-    if (cachedHandler) {
+    const hasLocales = hasInspectorLocaleGroupsRef.current(nextEntry.localeGroups);
+    if (cachedHandler && hasLocales) {
       applyOpenedHandler(cachedHandler);
       return;
     }
@@ -102,8 +106,11 @@ export default function MermaidModal({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
 
-    void loadDiagramHandler(nextType)
-      .then((handler) => {
+    void Promise.all([
+      loadDiagramHandler(nextType),
+      ensureInspectorLocaleGroups(nextEntry.localeGroups),
+    ])
+      .then(([handler]) => {
         if (cancelled || loadRequestIdRef.current !== requestId) {
           return;
         }
@@ -118,7 +125,7 @@ export default function MermaidModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, initialCode, lang]);
+  }, [isOpen, initialCode, lang, ensureInspectorLocaleGroups]);
 
   const handleDiagramTypeChange = (rawNextType: MermaidDiagramType): void => {
     if (!isEditableDiagramType(rawNextType) || rawNextType === diagramType) {
@@ -127,12 +134,16 @@ export default function MermaidModal({
 
     const nextType = rawNextType;
     const prevType = diagramType;
+    const nextEntry = getDiagramRegistryEntry(nextType);
     const requestId = ++loadRequestIdRef.current;
 
     setDiagramType(nextType);
     setHandlerLoadError(null);
 
-    const applySwitchHandler = (nextHandler: ErasedDiagramHandler) => {
+    const applySwitchHandler = (
+      nextHandler: ErasedDiagramHandler,
+      catalog: TranslationCatalog
+    ) => {
       setLoadedHandlers((prev) =>
         prev[nextType] === nextHandler ? prev : { ...prev, [nextType]: nextHandler }
       );
@@ -144,7 +155,7 @@ export default function MermaidModal({
           currentData: existingForStoreKey,
           initialCode,
           lang,
-          t,
+          t: catalog,
         });
         setDiagramCache((prev) => ({
           ...prev,
@@ -165,17 +176,21 @@ export default function MermaidModal({
     };
 
     const cachedHandler = loadedHandlers[nextType] ?? getCachedDiagramHandler(nextType);
-    if (cachedHandler) {
-      applySwitchHandler(cachedHandler);
+    const hasLocales = hasInspectorLocaleGroups(nextEntry.localeGroups);
+    if (cachedHandler && hasLocales) {
+      applySwitchHandler(cachedHandler, t);
       return;
     }
 
-    void loadDiagramHandler(nextType)
-      .then((handler) => {
+    void Promise.all([
+      loadDiagramHandler(nextType),
+      ensureInspectorLocaleGroups(nextEntry.localeGroups),
+    ])
+      .then(([handler, freshCatalog]) => {
         if (loadRequestIdRef.current !== requestId) {
           return;
         }
-        applySwitchHandler(handler);
+        applySwitchHandler(handler, freshCatalog);
       })
       .catch((error) => {
         if (loadRequestIdRef.current === requestId) {
@@ -189,7 +204,10 @@ export default function MermaidModal({
   const activeEntry = getDiagramRegistryEntry(diagramType);
   const activeStoreKey = activeHandler?.storeKey ?? activeEntry.storeKey ?? null;
   const activeData = activeStoreKey ? diagramCache[activeStoreKey] : undefined;
-  const isHandlerReady = activeHandler !== null && activeData !== undefined;
+  const isHandlerReady =
+    activeHandler !== null &&
+    activeData !== undefined &&
+    hasInspectorLocaleGroups(activeEntry.localeGroups);
 
   const handleActiveDataChange = useCallback(
     (nextData: AnyDiagramData) => {

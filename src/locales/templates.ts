@@ -7,7 +7,7 @@ export const APP_VERSION =
 
 export const INITIAL_MARKDOWN_JA = `# Mermaid Flow Editor 使い方ガイド (v${APP_VERSION})
 
-Mermaid Flow Editorは、Markdown文書と20種類のMermaid図をGUI操作だけで作成・編集できる複数タブ対応エディタです。ツールバー右上の「？」ボタンからいつでもこのガイドを開き直せます。
+Mermaid Flow Editorは、Markdown文書と31種類のMermaid図をGUI操作だけで作成・編集できる複数タブ対応エディタです。ツールバー右上の「？」ボタンからいつでもこのガイドを開き直せます。
 
 ## 1. 2つの編集モードを切り替える
 
@@ -17,9 +17,9 @@ Mermaid Flow Editorは、Markdown文書と20種類のMermaid図をGUI操作だ�
 2. 表の中にカーソルを置くと、右上のヘッダに行や列を増減するGUIボタンが表示されます。
 3. 2ペイン編集モードではMarkdown原文とリアルタイムプレビューを並べて表示でき、リスト行でEnterを押すと次の記号や連番が自動で続きます。
 
-## 2. 20種類のMermaid図をGUIで組み立てる
+## 2. 31種類のMermaid図をGUIで組み立てる
 
-ツールバーの「Mermaid図をGUI作成」ボタンを押すか、下の図に表示されている「この図をGUIで編集」ボタンを押すと専用エディタが開きます。フローチャートやスイムレーン図をはじめ、ツリービュー、ガントチャート、カンバン、円グラフ、棒・折れ線グラフ、アーキテクチャ図、マインドマップ、四象限チャート、シーケンス図、クラス図、状態遷移図、ER図、C4図、Gitグラフ、タイムライン、ブロック図、レールロード図、石川図を視覚的に編集できます。
+ツールバーの「Mermaid図をGUI作成」ボタンを押すか、下の図に表示されている「この図をGUIで編集」ボタンを押すと専用エディタが開きます。フローチャートやスイムレーン図をはじめ、ツリービュー、ガントチャート、カンバン、円グラフ、棒・折れ線グラフ、アーキテクチャ図、マインドマップ、四象限チャート、シーケンス図、クラス図、状態遷移図、ER図、C4図、Gitグラフ、タイムライン、ブロック図、レールロード図、石川図、ユーザージャーニー図、ツリーマップ、ベン図、ウォードリーマップ、クネビン図、要件図、パケット図、イベントモデリング図、サンキー図、レーダーチャート、バージョン情報を視覚的に編集できます。
 
 \`\`\`mermaid
 flowchart TD
@@ -51,6 +51,7 @@ flowchart TD
 
 | 操作内容 | キー操作 |
 |---|---|
+| 新規タブ作成 | Ctrl+N（ブラウザではAlt+N / Ctrl+Alt+N） |
 | ファイルを開く | Ctrl+O |
 | 上書き保存 | Ctrl+S |
 | 名前を付けて保存 | Ctrl+Shift+S |
@@ -74,7 +75,7 @@ flowchart TD
 
 export const INITIAL_MARKDOWN_EN = `# Mermaid Flow Editor Usage Guide (v${APP_VERSION})
 
-Mermaid Flow Editor is a multi-tab editor for creating Markdown documents and 20 types of Mermaid diagrams visually. Click the "?" help button in the top-right toolbar anytime to reopen this guide.
+Mermaid Flow Editor is a multi-tab editor for creating Markdown documents and 31 types of Mermaid diagrams visually. Click the "?" help button in the top-right toolbar anytime to reopen this guide.
 
 ## 1. Switch Between Visual and Split Modes
 
@@ -84,9 +85,9 @@ Use the mode toggle button in the toolbar to pick the editing style you prefer.
 2. Place your cursor inside any table in Visual Mode to reveal row and column controls in the pane header.
 3. In Split Mode, edit raw Markdown side-by-side with a live preview—pressing Enter on bullet, task, or numbered lists automatically continues and renumbers items.
 
-## 2. Build 20 Mermaid Diagram Types Visually
+## 2. Build 31 Mermaid Diagram Types Visually
 
-Click "Create Mermaid Diagram" in the toolbar or click "Edit Diagram in GUI" on the diagram below to open the visual builder. You can edit Flowcharts, Swimlane Diagrams, Tree Views, Gantt Charts, Kanban Boards, Pie Charts, XY Charts, Architecture Diagrams, Mindmaps, Quadrant Charts, Sequence Diagrams, Class Diagrams, State Diagrams, ER Diagrams, C4 Diagrams, Git Graphs, Timelines, Block Diagrams, Railroad Diagrams, and Ishikawa Diagrams.
+Click "Create Mermaid Diagram" in the toolbar or click "Edit Diagram in GUI" on the diagram below to open the visual builder. You can edit Flowcharts, Swimlane Diagrams, Tree Views, Gantt Charts, Kanban Boards, Pie Charts, XY Charts, Architecture Diagrams, Mindmaps, Quadrant Charts, Sequence Diagrams, Class Diagrams, State Diagrams, ER Diagrams, C4 Diagrams, Git Graphs, Timelines, Block Diagrams, Railroad Diagrams, Ishikawa Diagrams, User Journeys, Treemaps, Venn Diagrams, Wardley Maps, Cynefin Frameworks, Requirement Diagrams, Packet Diagrams, Event Modeling Diagrams, Sankey Diagrams, Radar Charts, and Version Info.
 
 \`\`\`mermaid
 flowchart TD
@@ -118,6 +119,7 @@ Click inside this table in Visual Mode to try adding or removing rows and column
 
 | Action | Shortcut |
 |---|---|
+| New Document Tab | Ctrl+N (Alt+N / Ctrl+Alt+N in browsers) |
 | Open File | Ctrl+O |
 | Save File | Ctrl+S |
 | Save File As | Ctrl+Shift+S |

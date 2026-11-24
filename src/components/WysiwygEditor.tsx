@@ -17,7 +17,7 @@ import {
   serializerCtx,
 } from '@milkdown/kit/core';
 import type { Ctx } from '@milkdown/kit/ctx';
-import { commonmark } from '@milkdown/kit/preset/commonmark';
+import { commonmark, linkSchema } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { block, type BlockProvider } from '@milkdown/kit/plugin/block';
 import { cursor, dropIndicatorConfig } from '@milkdown/kit/plugin/cursor';
@@ -46,14 +46,24 @@ import {
   moveBlockUp,
 } from '../utils/wysiwygBlockActions';
 import WysiwygBlockMenus from './wysiwyg/WysiwygBlockMenus';
+import WysiwygLinkPopover from './wysiwyg/WysiwygLinkPopover';
 import {
   createWysiwygImperativeHandle,
   handleWysiwygContainerClick,
 } from './wysiwyg/editorCommands';
+import {
+  applyLinkRangeUpdate,
+  findLinkMarkRangeAtPos,
+  findLinkMarkRangeInSelection,
+  removeLinkMarkInRange,
+  resolveAnchorCoords,
+  validateLinkHrefInput,
+} from './wysiwyg/linkUtils';
 import { createMermaidBlockViewPlugin } from './wysiwyg/mermaidNodeView';
 import {
   createBlockHandleViewFactory,
   createExitEmptyContainerOnBackspacePlugin,
+  createLinkInteractionPlugin,
   createSlashKeymapPlugin,
   syncSlashMenuState,
 } from './wysiwyg/plugins';
@@ -62,6 +72,7 @@ import type {
   WysiwygEditorHandle,
   WysiwygEditorProps,
   WysiwygEditorStrings,
+  WysiwygLinkPopoverState,
   WysiwygMenuState,
 } from './wysiwyg/types';
 
@@ -85,9 +96,12 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
     const [menuState, setMenuState] = useState<WysiwygMenuState | null>(null);
     const [menuQuery, setMenuQuery] = useState('');
     const [menuActiveIndex, setMenuActiveIndex] = useState(0);
+    const [linkPopover, setLinkPopover] = useState<WysiwygLinkPopoverState | null>(null);
 
     const menuStateRef = useRef<WysiwygMenuState | null>(null);
     menuStateRef.current = menuState;
+    const linkPopoverRef = useRef<WysiwygLinkPopoverState | null>(null);
+    linkPopoverRef.current = linkPopover;
     const menuActiveIndexRef = useRef(0);
     menuActiveIndexRef.current = menuActiveIndex;
     const dismissedSlashTextRef = useRef<string | null>(null);
@@ -96,6 +110,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
     const blockDragBtnRef = useRef<HTMLButtonElement | null>(null);
     const menuContainerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const linkPopoverContainerRef = useRef<HTMLDivElement>(null);
 
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
@@ -171,6 +186,171 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       setMenuQuery('');
       setMenuActiveIndex(0);
       menuActiveIndexRef.current = 0;
+    };
+
+    const closeLinkPopover = (): void => {
+      linkPopoverRef.current = null;
+      setLinkPopover(null);
+    };
+
+    const openLinkEditorAtSelection = (): void => {
+      const editor = editorRef.current;
+      if (!editor || !readyRef.current) {
+        return;
+      }
+      closeMenu();
+      blockProviderRef.current?.hide();
+
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const linkType = linkSchema.type(ctx);
+        const existing = findLinkMarkRangeInSelection(view.state, linkType);
+        const { from, to } = view.state.selection;
+
+        if (existing) {
+          const coords = resolveAnchorCoords(view, existing.from, mountRef.current);
+          const nextState: WysiwygLinkPopoverState = {
+            mode: 'edit',
+            isNew: false,
+            from: existing.from,
+            to: existing.to,
+            label: existing.text,
+            href: existing.href,
+            ...coords,
+          };
+          linkPopoverRef.current = nextState;
+          setLinkPopover(nextState);
+          return;
+        }
+
+        const selectedText =
+          from !== to ? view.state.doc.textBetween(from, to, ' ') : '';
+        const coords = resolveAnchorCoords(view, from, mountRef.current);
+        const nextState: WysiwygLinkPopoverState = {
+          mode: 'edit',
+          isNew: true,
+          from,
+          to,
+          label: selectedText,
+          href: '',
+          ...coords,
+        };
+        linkPopoverRef.current = nextState;
+        setLinkPopover(nextState);
+      });
+    };
+    const openLinkEditorAtSelectionRef = useRef(openLinkEditorAtSelection);
+    openLinkEditorAtSelectionRef.current = openLinkEditorAtSelection;
+
+    const handlePlainClickLink = (
+      anchorEl: HTMLAnchorElement,
+      rawHref: string
+    ): void => {
+      const editor = editorRef.current;
+      if (!editor || !readyRef.current) {
+        return;
+      }
+      closeMenu();
+      blockProviderRef.current?.hide();
+
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const linkType = linkSchema.type(ctx);
+        let domStart = view.state.selection.from;
+        try {
+          domStart = view.posAtDOM(anchorEl, 0);
+        } catch {
+          // selection.from をフォールバックとして使用する
+        }
+        const innerProbe =
+          anchorEl.textContent && anchorEl.textContent.length > 0
+            ? Math.min(domStart + 1, view.state.doc.content.size)
+            : domStart;
+        const found =
+          findLinkMarkRangeAtPos(view.state, linkType, innerProbe, true) ??
+          findLinkMarkRangeAtPos(view.state, linkType, domStart, true) ??
+          findLinkMarkRangeInSelection(view.state, linkType);
+        if (!found) {
+          return;
+        }
+        const coords = resolveAnchorCoords(
+          view,
+          found.from,
+          mountRef.current,
+          anchorEl
+        );
+        const nextState: WysiwygLinkPopoverState = {
+          mode: 'preview',
+          isNew: false,
+          from: found.from,
+          to: found.to,
+          label: found.text,
+          href: found.href || rawHref,
+          ...coords,
+        };
+        linkPopoverRef.current = nextState;
+        setLinkPopover(nextState);
+      });
+    };
+
+    const handleOpenHref = (rawHref: string): void => {
+      const validated = validateLinkHrefInput(rawHref);
+      if (!validated.ok) {
+        return;
+      }
+      if (onOpenMarkdownLinkRef.current) {
+        onOpenMarkdownLinkRef.current(validated.href);
+        return;
+      }
+      if (/^(?:https?|mailto):/i.test(validated.href)) {
+        window.open(validated.href, '_blank', 'noopener,noreferrer');
+      }
+    };
+
+    const handleApplyLinkPopover = (label: string, href: string): void => {
+      const current = linkPopoverRef.current;
+      const editor = editorRef.current;
+      if (!current || !editor || !readyRef.current) {
+        return;
+      }
+      closeLinkPopover();
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        applyLinkRangeUpdate(
+          view,
+          linkSchema.type(ctx),
+          { from: current.from, to: current.to },
+          label,
+          href
+        );
+        view.focus();
+      });
+      flushCurrentMarkdown();
+    };
+
+    const handleRemoveLinkPopover = (): void => {
+      const current = linkPopoverRef.current;
+      const editor = editorRef.current;
+      if (!current || !editor || !readyRef.current) {
+        return;
+      }
+      closeLinkPopover();
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        removeLinkMarkInRange(view, linkSchema.type(ctx), {
+          from: current.from,
+          to: current.to,
+        });
+        view.focus();
+      });
+      flushCurrentMarkdown();
+    };
+
+    const handleCloseAndFocusLinkPopover = (): void => {
+      closeLinkPopover();
+      editorRef.current?.action((ctx) => {
+        ctx.get(editorViewCtx).focus();
+      });
     };
 
     const executeInsertItem = (itemId: BlockInsertItemId): void => {
@@ -249,6 +429,43 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
     }, [menuState?.kind]);
 
     const hasOpenMenu = menuState !== null;
+    const hasOpenLinkPopover = linkPopover !== null;
+
+    useEffect(() => {
+      if (!hasOpenLinkPopover) {
+        return;
+      }
+
+      const handlePointerDown = (event: PointerEvent): void => {
+        const target = event.target as globalThis.Node | null;
+        if (!target) {
+          return;
+        }
+        if (linkPopoverContainerRef.current?.contains(target)) {
+          return;
+        }
+        const clickedAnchor =
+          target instanceof Element ? target.closest('a[href]') : null;
+        if (clickedAnchor && mountRef.current?.contains(clickedAnchor)) {
+          return;
+        }
+        closeLinkPopover();
+      };
+
+      const handleEscapeKey = (event: KeyboardEvent): void => {
+        if (event.key !== 'Escape') {
+          return;
+        }
+        handleCloseAndFocusLinkPopover();
+      };
+
+      document.addEventListener('pointerdown', handlePointerDown);
+      document.addEventListener('keydown', handleEscapeKey);
+      return () => {
+        document.removeEventListener('pointerdown', handlePointerDown);
+        document.removeEventListener('keydown', handleEscapeKey);
+      };
+    }, [hasOpenLinkPopover]);
 
     useEffect(() => {
       if (!hasOpenMenu) {
@@ -363,6 +580,13 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       mountEl.addEventListener('mouseleave', handleMountMouseLeave);
 
       const exitEmptyContainerPlugin = createExitEmptyContainerOnBackspacePlugin();
+      const linkInteractionPlugin = createLinkInteractionPlugin({
+        onOpenLinkEditor: () => openLinkEditorAtSelectionRef.current(),
+        onAfterLinkMutated: () => {
+          closeLinkPopover();
+          flushCurrentMarkdown();
+        },
+      });
       const initMarkdown = initialValueRef.current;
       lastEmittedRef.current = initMarkdown;
 
@@ -411,6 +635,14 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
             .selectionUpdated((innerCtx) => {
               syncTableCursorState(innerCtx);
               syncSlashMenuState(innerCtx, slashDeps);
+              const activePopover = linkPopoverRef.current;
+              if (activePopover?.mode === 'preview') {
+                const view = innerCtx.get(editorViewCtx);
+                const { from, to } = view.state.selection;
+                if (to < activePopover.from || from > activePopover.to) {
+                  closeLinkPopover();
+                }
+              }
             })
             .blur(() => {
               flushCurrentMarkdown();
@@ -423,6 +655,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
         .use(cursor)
         .use(block)
         .use(slashKeymapPlugin)
+        .use(linkInteractionPlugin)
         .use(exitEmptyContainerPlugin)
         .use(mermaidBlockViewPlugin)
         .create()
@@ -451,6 +684,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
         blockDragBtnRef.current = null;
         mountEl.removeEventListener('mouseleave', handleMountMouseLeave);
         closeMenu();
+        closeLinkPopover();
         setIsCursorInTable(false);
         if (createdEditor) {
           void createdEditor.destroy();
@@ -470,6 +704,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
       }
       lastEmittedRef.current = value;
       closeMenu();
+      closeLinkPopover();
       blockProviderRef.current?.hide();
       editor.action(replaceAll(value));
       editor.action((ctx) => {
@@ -501,6 +736,7 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
           editorRef,
           readyRef,
           runWithFocus: (fn) => runWithFocusRef.current(fn),
+          onOpenLinkEditor: () => openLinkEditorAtSelectionRef.current(),
         }),
       []
     );
@@ -560,17 +796,34 @@ const WysiwygEditor = forwardRef<WysiwygEditorHandle, WysiwygEditorProps>(
               editorRef.current,
               readyRef.current,
               onOpenMarkdownLinkRef.current,
-              flushCurrentMarkdown
+              flushCurrentMarkdown,
+              handlePlainClickLink
             )
           }
           onScroll={() => {
             if (menuStateRef.current) {
               closeMenu();
             }
+            if (linkPopoverRef.current) {
+              closeLinkPopover();
+            }
           }}
         >
           <div ref={mountRef} className="wysiwyg-prosemirror-root" />
         </div>
+        <WysiwygLinkPopover
+          popover={linkPopover}
+          containerRef={linkPopoverContainerRef}
+          onOpenHref={handleOpenHref}
+          onSwitchToEdit={() =>
+            setLinkPopover((prev) =>
+              prev ? { ...prev, mode: 'edit' } : null
+            )
+          }
+          onApply={handleApplyLinkPopover}
+          onRemove={handleRemoveLinkPopover}
+          onClose={handleCloseAndFocusLinkPopover}
+        />
         <WysiwygBlockMenus
           menuState={menuState}
           menuQuery={menuQuery}

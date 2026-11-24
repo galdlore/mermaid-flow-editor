@@ -8,6 +8,7 @@ export interface UseGlobalShortcutsOptions {
   onCloseMermaidModal: () => void;
   onCloseSettingsModal: () => void;
   onCloseCloudBrowser: () => void;
+  onNewFile: () => void;
   onOpenFile: () => Promise<void>;
   onPrint: () => Promise<void>;
   onSaveFile: () => Promise<void>;
@@ -21,6 +22,7 @@ export function useGlobalShortcuts({
   onCloseMermaidModal,
   onCloseSettingsModal,
   onCloseCloudBrowser,
+  onNewFile,
   onOpenFile,
   onPrint,
   onSaveFile,
@@ -52,6 +54,22 @@ export function useGlobalShortcuts({
         return;
       }
 
+      if (event.isComposing) {
+        return;
+      }
+
+      if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 'n'
+      ) {
+        event.preventDefault();
+        onNewFile();
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
@@ -69,6 +87,9 @@ export function useGlobalShortcuts({
       } else if (key === 'p' && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         void onPrint();
+      } else if (!event.shiftKey && (key === 'n' || (event.altKey && event.code === 'KeyN'))) {
+        event.preventDefault();
+        onNewFile();
       }
     };
 
@@ -82,6 +103,7 @@ export function useGlobalShortcuts({
     onCloseCloudBrowser,
     onCloseMermaidModal,
     onCloseSettingsModal,
+    onNewFile,
     onOpenFile,
     onPrint,
     onSaveFile,

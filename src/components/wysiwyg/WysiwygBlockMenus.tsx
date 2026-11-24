@@ -37,7 +37,7 @@ const BLOCK_ITEM_ICON_MAP: Record<BlockInsertItemId, ReactNode> = {
   divider: <Minus size={15} />,
 };
 
-function getClampedMenuStyle(
+export function getClampedMenuStyle(
   anchorTop: number,
   anchorLeft: number,
   menuWidth: number,

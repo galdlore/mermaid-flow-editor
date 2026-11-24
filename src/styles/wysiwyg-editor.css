@@ -279,6 +279,189 @@
 .wysiwyg-prosemirror-root .ProseMirror a {
   color: var(--accent-color);
   text-decoration: underline;
+  cursor: pointer;
+}
+
+.wysiwyg-link-popover {
+  position: fixed;
+  z-index: 85;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.wysiwyg-link-preview-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 320px;
+  padding: 5px 7px;
+}
+
+.wysiwyg-link-preview-url {
+  max-width: 196px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent-color);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.wysiwyg-link-preview-url:hover:not(:disabled) {
+  background-color: var(--accent-soft);
+  text-decoration: underline;
+}
+
+.wysiwyg-link-preview-url:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.wysiwyg-link-preview-sep {
+  width: 1px;
+  height: 16px;
+  background-color: var(--border-color);
+  margin: 0 2px;
+}
+
+.wysiwyg-link-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.wysiwyg-link-icon-btn:hover:not(:disabled) {
+  background-color: var(--bg-subtle);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.wysiwyg-link-icon-btn.is-danger:hover:not(:disabled) {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: var(--danger-color);
+}
+
+.wysiwyg-link-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wysiwyg-link-edit-box {
+  width: 320px;
+  padding: 10px 12px;
+}
+
+.wysiwyg-link-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wysiwyg-link-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wysiwyg-link-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.wysiwyg-link-input {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-subtle);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.wysiwyg-link-input:focus {
+  border-color: var(--accent-color);
+  background-color: var(--bg-surface);
+}
+
+.wysiwyg-link-input.is-invalid {
+  border-color: var(--danger-color);
+}
+
+.wysiwyg-link-error {
+  font-size: 11px;
+  color: var(--danger-color);
+  line-height: 1.35;
+}
+
+.wysiwyg-link-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.wysiwyg-link-actions-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.wysiwyg-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.wysiwyg-link-btn:hover {
+  background-color: var(--bg-subtle);
+}
+
+.wysiwyg-link-btn.is-primary {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+}
+
+.wysiwyg-link-btn.is-primary:hover {
+  opacity: 0.92;
+}
+
+.wysiwyg-link-btn.is-danger {
+  color: var(--danger-color);
+  border-color: #fecaca;
+}
+
+.wysiwyg-link-btn.is-danger:hover {
+  background-color: #fef2f2;
 }
 
 .wysiwyg-prosemirror-root .ProseMirror :not(pre)>code {

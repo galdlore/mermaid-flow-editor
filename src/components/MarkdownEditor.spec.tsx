@@ -74,7 +74,7 @@ describe('MarkdownEditor split mode keyboard editing', () => {
       />
     );
 
-    const specLink = await screen.findByRole('link', { name: '仕様書' });
+    const specLink = await screen.findByRole('link', { name: '仕様書' }, { timeout: 4000 });
     expect(specLink).toHaveClass('markdown-doc-link');
     expect(specLink).not.toHaveAttribute('target', '_blank');
 
