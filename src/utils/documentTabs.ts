@@ -41,6 +41,25 @@ export function getTabBaseFileName(
   return parts[parts.length - 1] || untitledFileName;
 }
 
+/** 2つのローカルファイルパスが同一ファイルを指すか判定する（Windowsの大文字・小文字と区切り文字を吸収） */
+export function isSameLocalFilePath(
+  a: string | null | undefined,
+  b: string | null | undefined
+): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
+    return false;
+  }
+  if (a === b) {
+    return true;
+  }
+  const isWindowsPath = (value: string): boolean =>
+    /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
+  if (isWindowsPath(a) && isWindowsPath(b)) {
+    return a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase();
+  }
+  return false;
+}
+
 /** リモートURLから末尾ファイル名（デコード済み）を取り出す */
 export function getRemoteUrlBaseName(remoteUrl: string, fallback: string): string {
   const cleanUrl = remoteUrl.trim().split(/[?#]/)[0] ?? '';

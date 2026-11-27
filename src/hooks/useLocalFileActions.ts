@@ -11,10 +11,12 @@ import {
 import type { MarkdownEditorHandle } from '../components/MarkdownEditor';
 import type { Language } from '../i18n';
 import type { TranslationCatalog } from '../locales/types';
+import type { ExternalFileOpenPayload } from '../types/editor';
 import {
   computeTabDisplayTitles,
   createDocumentTabId,
   getTabBaseFileName,
+  isSameLocalFilePath,
   type DocumentTab,
   type PersistedTabsState,
 } from '../utils/documentTabs';
@@ -41,6 +43,100 @@ import {
   type RemoteSaveSettings,
 } from '../utils/remoteStorage';
 import { isUntouchedInitialTab } from './useDocumentTabs';
+
+export interface ApplyExternalFilesResult {
+  nextState: PersistedTabsState;
+  openedPaths: string[];
+  switchedPaths: string[];
+  failedPayloads: ExternalFileOpenPayload[];
+}
+
+/** 外部から渡されたファイル一覧をタブ状態へ順次反映する */
+export function applyExternalFilesToTabsState(
+  prev: PersistedTabsState,
+  payloads: readonly ExternalFileOpenPayload[]
+): ApplyExternalFilesResult {
+  let tabs = [...prev.tabs];
+  let activeTabId = prev.activeTabId;
+  const openedPaths: string[] = [];
+  const switchedPaths: string[] = [];
+  const failedPayloads: ExternalFileOpenPayload[] = [];
+
+  for (const payload of payloads) {
+    if (!payload.ok || typeof payload.content !== 'string') {
+      failedPayloads.push(payload);
+      continue;
+    }
+
+    const existingTab = tabs.find((tab) => isSameLocalFilePath(tab.filePath, payload.filePath));
+    if (existingTab) {
+      activeTabId = existingTab.id;
+      switchedPaths.push(existingTab.filePath ?? payload.filePath);
+      continue;
+    }
+
+    const currentActive = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+    if (currentActive && isUntouchedInitialTab(currentActive)) {
+      tabs = tabs.map((tab) =>
+        tab.id === currentActive.id
+          ? {
+              ...tab,
+              filePath: payload.filePath,
+              content: payload.content as string,
+              isDirty: false,
+              isGuide: false,
+              remoteFileName: null,
+              remoteUrl: null,
+              embedFileId: null,
+              embedReadOnly: false,
+            }
+          : tab
+      );
+      activeTabId = currentActive.id;
+      openedPaths.push(payload.filePath);
+      continue;
+    }
+
+    const newTabId = createDocumentTabId();
+    tabs = [
+      ...tabs,
+      {
+        id: newTabId,
+        filePath: payload.filePath,
+        content: payload.content,
+        isDirty: false,
+        isGuide: false,
+        remoteFileName: null,
+        remoteUrl: null,
+        embedFileId: null,
+        embedReadOnly: false,
+      },
+    ];
+    activeTabId = newTabId;
+    openedPaths.push(payload.filePath);
+  }
+
+  return {
+    nextState:
+      openedPaths.length === 0 && switchedPaths.length === 0 ? prev : { activeTabId, tabs },
+    openedPaths,
+    switchedPaths,
+    failedPayloads,
+  };
+}
+
+let pendingConsumptionStarted = false;
+let bufferedExternalPayloads: ExternalFileOpenPayload[] = [];
+let activeExternalPayloadHandler:
+  | ((payloads: readonly ExternalFileOpenPayload[]) => void)
+  | null = null;
+
+/** テスト間で外部ファイル受け取り状態を初期化する */
+export function resetExternalFileConsumerForTests(): void {
+  pendingConsumptionStarted = false;
+  bufferedExternalPayloads = [];
+  activeExternalPayloadHandler = null;
+}
 
 export interface UseLocalFileActionsOptions {
   activeTab: DocumentTab;
@@ -86,6 +182,105 @@ export function useLocalFileActions({
 }: UseLocalFileActionsOptions) {
   const dragDepthRef = useRef(0);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const activeTabIdRef = useRef(activeTab.id);
+  activeTabIdRef.current = activeTab.id;
+
+  const applyExternalPayloads = useCallback(
+    (payloads: readonly ExternalFileOpenPayload[]) => {
+      const summary = applyExternalFilesToTabsState(
+        { activeTabId: activeTabIdRef.current, tabs: tabsRef.current },
+        payloads
+      );
+
+      if (summary.openedPaths.length > 0 || summary.switchedPaths.length > 0) {
+        setTabsState((prev) => applyExternalFilesToTabsState(prev, payloads).nextState);
+        onCloseTabSwitcher();
+        editorRef.current?.activateEditMode();
+      }
+
+      if (summary.failedPayloads.length > 0) {
+        const lastFailure = summary.failedPayloads[summary.failedPayloads.length - 1];
+        onStatusMessage(lastFailure.error || t.app.statusOpenError);
+        return;
+      }
+      if (summary.openedPaths.length > 0) {
+        const lastOpened = summary.openedPaths[summary.openedPaths.length - 1];
+        onStatusMessage(
+          t.app.statusOpened(getTabBaseFileName(lastOpened, t.app.untitledFileName))
+        );
+        return;
+      }
+      if (summary.switchedPaths.length > 0) {
+        const lastSwitched = summary.switchedPaths[summary.switchedPaths.length - 1];
+        onStatusMessage(
+          t.app.statusSwitchedExistingTab(
+            getTabBaseFileName(lastSwitched, t.app.untitledFileName)
+          )
+        );
+      }
+    },
+    [editorRef, onCloseTabSwitcher, onStatusMessage, setTabsState, t, tabsRef]
+  );
+
+  const applyExternalPayloadsRef = useRef(applyExternalPayloads);
+  applyExternalPayloadsRef.current = applyExternalPayloads;
+
+  useEffect(() => {
+    if (isEmbedMode) {
+      return;
+    }
+    const api = window.electronAPI;
+    if (!api) {
+      return;
+    }
+
+    const dispatchPayloads = (payloads: readonly ExternalFileOpenPayload[]): void => {
+      if (payloads.length > 0) {
+        applyExternalPayloadsRef.current(payloads);
+      }
+    };
+
+    activeExternalPayloadHandler = dispatchPayloads;
+
+    if (bufferedExternalPayloads.length > 0) {
+      const drained = bufferedExternalPayloads.splice(0, bufferedExternalPayloads.length);
+      dispatchPayloads(drained);
+    }
+
+    if (!pendingConsumptionStarted && typeof api.consumePendingExternalFiles === 'function') {
+      pendingConsumptionStarted = true;
+      void api
+        .consumePendingExternalFiles()
+        .then((payloads) => {
+          if (!Array.isArray(payloads) || payloads.length === 0) {
+            return;
+          }
+          if (activeExternalPayloadHandler) {
+            activeExternalPayloadHandler(payloads);
+          } else {
+            bufferedExternalPayloads.push(...payloads);
+          }
+        })
+        .catch(() => {
+          // 起動時ファイル取得に失敗しても通常起動は継続する
+        });
+    }
+
+    const unsubscribe = api.onExternalFileOpened?.((payload) => {
+      if (activeExternalPayloadHandler) {
+        activeExternalPayloadHandler([payload]);
+      } else {
+        bufferedExternalPayloads.push(payload);
+      }
+    });
+
+    return () => {
+      if (activeExternalPayloadHandler === dispatchPayloads) {
+        activeExternalPayloadHandler = null;
+      }
+      unsubscribe?.();
+    };
+  }, [isEmbedMode]);
 
   const handleOpenFile = useCallback(async () => {
     try {

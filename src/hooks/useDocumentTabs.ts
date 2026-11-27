@@ -57,6 +57,17 @@ function loadInitialEditorMode(
   return 'split';
 }
 
+function hasLaunchFileQuery(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  try {
+    return new URLSearchParams(window.location.search).get('launchFile') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function createInitialTabsState(lang: Language, isEmbedMode: boolean): PersistedTabsState {
   if (isEmbedMode) {
     const id = createDocumentTabId();
@@ -79,15 +90,16 @@ function createInitialTabsState(lang: Language, isEmbedMode: boolean): Persisted
   const defaultSample = getInitialMarkdownByLang(lang);
   if (isElectronEnv()) {
     const id = createDocumentTabId();
+    const launchingExternalFile = hasLaunchFileQuery();
     return {
       activeTabId: id,
       tabs: [
         {
           id,
           filePath: null,
-          content: defaultSample,
+          content: launchingExternalFile ? '' : defaultSample,
           isDirty: false,
-          isGuide: true,
+          isGuide: !launchingExternalFile,
         },
       ],
     };

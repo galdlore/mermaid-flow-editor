@@ -26,6 +26,14 @@ interface FileSaveResult {
   filePath?: string;
 }
 
+interface ExternalFileOpenPayload {
+  ok: boolean;
+  filePath: string;
+  content?: string;
+  errorCode?: 'not-found' | 'too-large' | 'unsupported-ext' | 'read-error';
+  error?: string;
+}
+
 interface RemoteRequestPayload {
   url: string;
   method: 'GET' | 'PUT' | 'POST' | 'OPTIONS' | 'HEAD' | 'PROPFIND' | 'MKCOL';
@@ -50,6 +58,8 @@ interface ElectronBridgeAPI {
   saveHtmlFile: (content: string, suggestedName?: string) => Promise<FileSaveResult>;
   savePdfFile: (suggestedName?: string) => Promise<FileSaveResult>;
   resetFileSession: () => Promise<void>;
+  consumePendingExternalFiles: () => Promise<ExternalFileOpenPayload[]>;
+  onExternalFileOpened: (listener: (payload: ExternalFileOpenPayload) => void) => () => void;
   remoteRequest: (payload: RemoteRequestPayload) => Promise<RemoteRequestIpcResult>;
 }
 
@@ -66,6 +76,17 @@ const electronAPI: ElectronBridgeAPI = {
   savePdfFile: (suggestedName?: string) =>
     ipcRenderer.invoke('file:savePdf', suggestedName) as Promise<FileSaveResult>,
   resetFileSession: () => ipcRenderer.invoke('file:resetSession') as Promise<void>,
+  consumePendingExternalFiles: () =>
+    ipcRenderer.invoke('file:consumePendingExternalFiles') as Promise<ExternalFileOpenPayload[]>,
+  onExternalFileOpened: (listener: (payload: ExternalFileOpenPayload) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: ExternalFileOpenPayload) => {
+      listener(payload);
+    };
+    ipcRenderer.on('file:openedExternally', wrapped);
+    return () => {
+      ipcRenderer.removeListener('file:openedExternally', wrapped);
+    };
+  },
   remoteRequest: (payload: RemoteRequestPayload) =>
     ipcRenderer.invoke('remote:request', payload) as Promise<RemoteRequestIpcResult>,
 };

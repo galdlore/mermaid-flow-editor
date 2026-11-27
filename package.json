@@ -1,6 +1,6 @@
 {
   "name": "mermaid-gui-markdown-editor",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "private": true,
   "description": "Windows 11 GUI Markdown and Mermaid Editor",
   "main": "dist-electron/main.js",
@@ -52,6 +52,20 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "md",
+        "name": "MermaidMarkdownEditor.md",
+        "description": "Markdown Document",
+        "role": "Editor"
+      },
+      {
+        "ext": "markdown",
+        "name": "MermaidMarkdownEditor.markdown",
+        "description": "Markdown Document",
+        "role": "Editor"
+      }
     ],
     "win": {
       "target": "nsis"

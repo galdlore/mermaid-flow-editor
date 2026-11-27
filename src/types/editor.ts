@@ -88,6 +88,14 @@ export interface FileSaveResult {
   filePath?: string;
 }
 
+export interface ExternalFileOpenPayload {
+  ok: boolean;
+  filePath: string;
+  content?: string;
+  errorCode?: 'not-found' | 'too-large' | 'unsupported-ext' | 'read-error';
+  error?: string;
+}
+
 export type RemoteRequestMethod =
   | 'GET'
   | 'PUT'
@@ -121,6 +129,8 @@ export interface ElectronAPI {
   saveHtmlFile?: (content: string, suggestedName?: string) => Promise<FileSaveResult>;
   savePdfFile?: (suggestedName?: string) => Promise<FileSaveResult>;
   resetFileSession?: () => Promise<void>;
+  consumePendingExternalFiles?: () => Promise<ExternalFileOpenPayload[]>;
+  onExternalFileOpened?: (listener: (payload: ExternalFileOpenPayload) => void) => () => void;
   remoteRequest?: (payload: RemoteRequestPayload) => Promise<RemoteRequestIpcResult>;
 }
 

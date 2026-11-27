@@ -5,6 +5,7 @@ import {
   formatDuplicateFileName,
   getRemoteUrlBaseName,
   getTabBaseFileName,
+  isSameLocalFilePath,
   isSupportedDroppedFileName,
   loadPersistedTabsState,
   persistTabsState,
@@ -151,4 +152,18 @@ test('persistTabsState and loadPersistedTabsState round-trip tabs and migrate le
   } finally {
     restore();
   }
+});
+
+test('isSameLocalFilePath compares Windows paths case-insensitively and across slashes', () => {
+  assert.equal(
+    isSameLocalFilePath('C:\\Docs\\Spec.md', 'c:/docs/spec.MD'),
+    true
+  );
+  assert.equal(
+    isSameLocalFilePath('\\\\Server\\Share\\Note.md', '//server/share/note.md'.replace(/\//g, '\\')),
+    true
+  );
+  assert.equal(isSameLocalFilePath('C:\\Docs\\a.md', 'C:\\Docs\\b.md'), false);
+  assert.equal(isSameLocalFilePath('/tmp/Spec.md', '/tmp/spec.md'), false);
+  assert.equal(isSameLocalFilePath(null, 'C:\\Docs\\a.md'), false);
 });

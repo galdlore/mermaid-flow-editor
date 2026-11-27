@@ -1,12 +1,53 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type FileFilter } from 'electron';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { extractMarkdownFilePathsFromArgv, SUPPORTED_MARKDOWN_EXTENSIONS } from './launchArgs';
+
+interface ExternalFileOpenPayload {
+  ok: boolean;
+  filePath: string;
+  content?: string;
+  errorCode?: 'not-found' | 'too-large' | 'unsupported-ext' | 'read-error';
+  error?: string;
+}
 
 let mainWindow: BrowserWindow | null = null;
 const authorizedFilePaths = new Set<string>();
+const pendingExternalFilePaths: string[] = [];
+let rendererReady = false;
 
 function normalizeAuthorizedPath(filePath: string): string {
   return path.resolve(filePath);
+}
+
+function normalizePathDedupeKey(filePath: string): string {
+  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
+}
+
+function enqueueExternalFilePaths(filePaths: readonly string[]): void {
+  const existingKeys = new Set(pendingExternalFilePaths.map(normalizePathDedupeKey));
+  for (const rawPath of filePaths) {
+    const resolved = normalizeAuthorizedPath(rawPath);
+    const key = normalizePathDedupeKey(resolved);
+    if (existingKeys.has(key)) {
+      continue;
+    }
+    existingKeys.add(key);
+    pendingExternalFilePaths.push(resolved);
+  }
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.focus();
 }
 
 function isSafeExternalUrl(rawUrl: string): boolean {
@@ -41,6 +82,8 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Mermaid Markdown Editor',
     autoHideMenuBar: true,
+    show: false,
+    backgroundColor: '#f3f4f6',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -53,12 +96,38 @@ function createWindow(): void {
     mainWindow.removeMenu();
   }
 
+  let shown = false;
+  const showWindow = (): void => {
+    if (shown || !mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    shown = true;
+    clearTimeout(fallbackShowTimer);
+    mainWindow.show();
+  };
+  const fallbackShowTimer = setTimeout(showWindow, 3000);
+  mainWindow.once('ready-to-show', showWindow);
+
+  const hasInitialExternalFiles = pendingExternalFilePaths.length > 0;
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) {
-    void mainWindow.loadURL(devUrl);
+    const targetUrl = new URL(devUrl);
+    if (hasInitialExternalFiles) {
+      targetUrl.searchParams.set('launchFile', '1');
+    }
+    void mainWindow.loadURL(targetUrl.toString());
   } else {
-    void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    void mainWindow.loadFile(
+      path.join(__dirname, '../dist/index.html'),
+      hasInitialExternalFiles ? { query: { launchFile: '1' } } : undefined
+    );
   }
+
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) {
+      rendererReady = false;
+    }
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalUrl(url)) {
@@ -98,6 +167,8 @@ function createWindow(): void {
   });
 
   mainWindow.on('closed', () => {
+    clearTimeout(fallbackShowTimer);
+    rendererReady = false;
     mainWindow = null;
   });
 }
@@ -182,8 +253,76 @@ async function savePdfWithDialog(
   return { canceled: false, filePath: resolvedPath };
 }
 
-const SUPPORTED_RELATIVE_EXTENSIONS = new Set(['.md', '.markdown', '.txt']);
-const MAX_RELATIVE_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_MARKDOWN_FILE_BYTES = 10 * 1024 * 1024;
+
+async function readExternalMarkdownFile(rawPath: string): Promise<ExternalFileOpenPayload> {
+  const resolvedPath = normalizeAuthorizedPath(rawPath);
+  const ext = path.extname(resolvedPath).toLowerCase();
+  if (!SUPPORTED_MARKDOWN_EXTENSIONS.has(ext)) {
+    return {
+      ok: false,
+      filePath: resolvedPath,
+      errorCode: 'unsupported-ext',
+      error: 'Only .md, .markdown, and .txt files can be opened.',
+    };
+  }
+
+  try {
+    const stats = await stat(resolvedPath);
+    if (!stats.isFile()) {
+      return {
+        ok: false,
+        filePath: resolvedPath,
+        errorCode: 'not-found',
+        error: 'Target is not a file.',
+      };
+    }
+    if (stats.size > MAX_MARKDOWN_FILE_BYTES) {
+      return {
+        ok: false,
+        filePath: resolvedPath,
+        errorCode: 'too-large',
+        error: 'File size exceeds 10MB limit.',
+      };
+    }
+
+    const content = await readFile(resolvedPath, 'utf-8');
+    authorizedFilePaths.add(resolvedPath);
+    return { ok: true, filePath: resolvedPath, content };
+  } catch (err) {
+    const errCode = (err as NodeJS.ErrnoException | null)?.code;
+    if (errCode === 'ENOENT' || errCode === 'ENOTDIR') {
+      return {
+        ok: false,
+        filePath: resolvedPath,
+        errorCode: 'not-found',
+        error: 'File not found.',
+      };
+    }
+    return {
+      ok: false,
+      filePath: resolvedPath,
+      errorCode: 'read-error',
+      error: err instanceof Error ? err.message : 'Failed to read file.',
+    };
+  }
+}
+
+async function dispatchExternalFilePaths(filePaths: readonly string[]): Promise<void> {
+  if (filePaths.length === 0) {
+    return;
+  }
+  if (mainWindow && !mainWindow.isDestroyed() && rendererReady) {
+    for (const rawPath of filePaths) {
+      const payload = await readExternalMarkdownFile(rawPath);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('file:openedExternally', payload);
+      }
+    }
+    return;
+  }
+  enqueueExternalFilePaths(filePaths);
+}
 
 function parseSafeRelativeSegments(rawRelativeHref: string): string[] | null {
   const trimmed = rawRelativeHref.trim();
@@ -291,7 +430,7 @@ function registerIpcHandlers(): void {
         path.resolve(path.dirname(resolvedBase), ...segments)
       );
       const ext = path.extname(targetPath).toLowerCase();
-      if (!SUPPORTED_RELATIVE_EXTENSIONS.has(ext)) {
+      if (!SUPPORTED_MARKDOWN_EXTENSIONS.has(ext)) {
         return {
           ok: false,
           errorCode: 'unsupported-ext',
@@ -309,7 +448,7 @@ function registerIpcHandlers(): void {
             error: 'Target is not a file.',
           };
         }
-        if (stats.size > MAX_RELATIVE_FILE_BYTES) {
+        if (stats.size > MAX_MARKDOWN_FILE_BYTES) {
           return {
             ok: false,
             errorCode: 'too-large',
@@ -385,6 +524,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('file:resetSession', () => {
     authorizedFilePaths.clear();
+  });
+
+  ipcMain.handle('file:consumePendingExternalFiles', async () => {
+    rendererReady = true;
+    const queued = pendingExternalFilePaths.splice(0, pendingExternalFilePaths.length);
+    const results: ExternalFileOpenPayload[] = [];
+    for (const filePath of queued) {
+      results.push(await readExternalMarkdownFile(filePath));
+    }
+    return results;
   });
 
   ipcMain.handle('remote:request', async (_event, rawPayload: unknown) => {
@@ -476,22 +625,61 @@ function registerIpcHandlers(): void {
   });
 }
 
-app.whenReady().then(() => {
-  if (process.platform !== 'darwin') {
-    Menu.setApplicationMenu(null);
-  }
-  registerIpcHandlers();
-  createWindow();
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  enqueueExternalFilePaths(
+    extractMarkdownFilePathsFromArgv(process.argv, {
+      isPackaged: app.isPackaged,
+      isDefaultApp: Boolean(process.defaultApp),
+      workingDirectory: process.cwd(),
+    })
+  );
+
+  app.on('second-instance', (_event, commandLine, workingDirectory) => {
+    const filePaths = extractMarkdownFilePathsFromArgv(commandLine, {
+      isPackaged: app.isPackaged,
+      isDefaultApp: Boolean(process.defaultApp),
+      workingDirectory,
+    });
+    if (!mainWindow && app.isReady()) {
       createWindow();
     }
+    focusMainWindow();
+    void dispatchExternalFilePaths(filePaths);
   });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+  app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    const filePaths = extractMarkdownFilePathsFromArgv(['app', filePath], {
+      isPackaged: true,
+    });
+    if (app.isReady() && !mainWindow) {
+      createWindow();
+    }
+    focusMainWindow();
+    void dispatchExternalFilePaths(filePaths);
+  });
+
+  app.whenReady().then(() => {
+    if (process.platform !== 'darwin') {
+      Menu.setApplicationMenu(null);
+    }
+    registerIpcHandlers();
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
